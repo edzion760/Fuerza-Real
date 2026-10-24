@@ -143,6 +143,18 @@ details.card[open] > summary::after { content: "–" }
 .btn.ghost, .days button:not([aria-pressed="true"]), .seg { background: linear-gradient(var(--surface), var(--surface)) padding-box, var(--oro) border-box }
 .seg button:not([aria-pressed="true"]) { color: var(--gold-hi) }
 .seg.modo { justify-self: start }
+.enf { display: grid; gap: 8px; margin-top: 14px }
+.enf:empty { display: none }
+.enf-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap }
+.chips { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px }
+@media (max-width: 380px) { .chips { grid-template-columns: repeat(2, 1fr) } }
+.chip { display: grid; justify-items: center; gap: 2px; padding: 8px 4px; border-radius: 12px; font-weight: 700; font-size: .85rem;
+  border: 1px solid transparent; background: linear-gradient(var(--surface), var(--surface)) padding-box, var(--oro) border-box; color: var(--gold-hi) }
+.chip svg { width: 22px; height: 22px }
+.chip[aria-pressed="true"] { background: var(--oro); color: var(--bg); box-shadow: 0 0 0 1px var(--red) }
+.chip.ro { cursor: default }
+.chip.off { opacity: .35 }
+.seg.sm button { padding: 5px 10px; font-size: .8rem }
 .label, .day-head .meta .num, .stat .num, .ring .count b, .p-name, .step .txt strong, .rec strong, .card strong {
   background: var(--oro); -webkit-background-clip: text; background-clip: text; color: transparent }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important } }
@@ -173,6 +185,10 @@ details.card[open] > summary::after { content: "–" }
   <symbol id="m-bicicleta" viewBox="0 0 64 64" fill="none" stroke="url(#oro-m)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 54h44M18 54l8-24h16l6 24"/><path d="M22 24h12M42 30l4-10h7"/><circle cx="46" cy="44" r="8"/><circle cx="31" cy="44" r="3"/></symbol>
   <symbol id="m-colchoneta" viewBox="0 0 64 64" fill="none" stroke="url(#oro-m)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="40" width="40" height="8" rx="2"/><circle cx="50" cy="40" r="8"/><circle cx="50" cy="40" r="3.5"/><path d="M16 40v8M26 40v8M36 40v8"/></symbol>
   <symbol id="m-estirar" viewBox="0 0 64 64" fill="none" stroke="url(#oro-m)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="32" cy="12" r="4.5"/><path d="M12 22l20 5 20-5M32 27v14l-10 15M32 41l10 15"/></symbol>
+  <symbol id="e-fuerza" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 7v10M3 9.5v5M18 7v10M21 9.5v5M6 12h12"/></symbol>
+  <symbol id="e-resistencia" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l3 2M9 2h6"/></symbol>
+  <symbol id="e-hipertrofia" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15c0-4 2-7 5-8l2-3 2 2-1 3c3 0 6 2 7 6-2 3-6 4-10 4-3 0-5-1-5-4z"/></symbol>
+  <symbol id="e-cardio" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20s-8-5-8-11a4.5 4.5 0 0 1 8-2.5A4.5 4.5 0 0 1 20 9c0 6-8 11-8 11z"/><path d="M7 12h3l1-2 2 4 1-2h3"/></symbol>
   <symbol id="i-salud" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="5"/><path d="M12 8v8M8 12h8"/></symbol>
 </svg>
 
@@ -190,6 +206,7 @@ details.card[open] > summary::after { content: "–" }
     <div class="row" style="flex-wrap:nowrap"><select id="sel-alumno" style="flex:1"></select>
       <button class="btn sm ghost" id="btn-nuevo" hidden>+ Nuevo</button></div>
   </div>
+  <div id="enfoque" class="enf"></div>
   <div class="days" id="days"></div>
 
   <section id="v-alumno"></section>
@@ -217,6 +234,7 @@ function ejemplo() {
       recs: { dieta: 'Desayuno con proteína (huevos o yogur griego). 2,5 L de agua al día. Cena liviana antes de las 8 p. m.',
               suplemento: 'Proteína de suero después de entrenar, 1 porción. Consultar antes de sumar otros productos.',
               profesional: 'Valoración con fisioterapeuta por molestia en rodilla derecha. Te paso el contacto por WhatsApp.' },
+      enfoque: { alcance: 'dia', semana: [], dias: { 0: ['hipertrofia', 'fuerza'], 1: ['cardio', 'resistencia'], 2: ['fuerza'], 4: ['hipertrofia'] } },
       semana: {
         0: { titulo: 'Pecho y tríceps', ejercicios: [
           ej('Press de banca', 'banco', 4, 12, 0, 60, 90, 'Baja la barra hasta el pecho, codos a 45°.'),
@@ -234,7 +252,7 @@ function ejemplo() {
           ej('Jalón al pecho', 'polea', 4, 12, 0, 60, 90, 'Saca el pecho y lleva los codos hacia abajo.'),
           ej('Curl con barra', 'barra', 3, 0, 40, 45, 0, 'Máximas repeticiones limpias en 40 segundos, sin balancear el cuerpo.') ] }
       } },
-    { id: 'a2', nombre: 'Andrés P. (ejemplo)', objetivo: 'Volumen', recs: {}, semana: {
+    { id: 'a2', nombre: 'Andrés P. (ejemplo)', objetivo: 'Volumen', recs: {}, enfoque: { alcance: 'semana', semana: ['fuerza', 'hipertrofia'], dias: {} }, semana: {
         0: { titulo: 'Full body', ejercicios: [ ej('Peso muerto', 'barra', 5, 5, 0, 120, 120, 'Espalda neutra.'), ej('Dominadas', 'dominadas', 4, 8, 0, 90, 0, '') ] } } }
   ] };
 }
@@ -281,7 +299,34 @@ function renderTop() {
   $('btn-nuevo').hidden = modo !== 'coach';
   $('m-alumno').setAttribute('aria-pressed', modo === 'alumno'); $('m-coach').setAttribute('aria-pressed', modo === 'coach');
   $('v-alumno').hidden = modo !== 'alumno'; $('v-coach').hidden = modo !== 'coach';
+  renderEnfoque();
   modo === 'alumno' ? renderAlumno() : renderCoach();
+}
+
+// Indicadores de enfoque: para toda la semana o para cada día.
+const ENFOQUES = { fuerza: 'Fuerza', resistencia: 'Resistencia', hipertrofia: 'Hipertrofia', cardio: 'Cardio' };
+const enfoqueDe = a => (a.enfoque ||= { alcance: 'semana', semana: [], dias: {} });
+const enfoqueActivo = (a, d) => { const f = enfoqueDe(a); return f.alcance === 'semana' ? f.semana : (f.dias[d] || []) };
+function renderEnfoque() {
+  const a = alumno(), f = enfoqueDe(a), act = enfoqueActivo(a, dia), box = $('enfoque');
+  const chip = (k, ro) => `<button class="chip${ro ? ' ro' : ''}${ro && !act.includes(k) ? ' off' : ''}" data-enf="${k}" aria-pressed="${act.includes(k)}" ${ro ? 'tabindex="-1"' : ''}><svg aria-hidden="true"><use href="#e-${k}"/></svg>${ENFOQUES[k]}</button>`;
+  if (modo === 'alumno') {
+    box.innerHTML = act.length ? `<span class="label">Enfoque ${f.alcance === 'semana' ? 'de la semana' : 'del ' + DIAS[dia]}</span><div class="chips">${Object.keys(ENFOQUES).map(k => chip(k, true)).join('')}</div>` : '';
+    return;
+  }
+  box.innerHTML = `
+    <div class="enf-head"><span class="label">Enfoque ${f.alcance === 'semana' ? 'de toda la semana' : 'del ' + DIAS[dia]}</span>
+      <div class="seg sm" role="group" aria-label="Aplica a">
+        <button data-alc="semana" aria-pressed="${f.alcance === 'semana'}">Semana completa</button>
+        <button data-alc="dia" aria-pressed="${f.alcance === 'dia'}">Por día</button>
+      </div></div>
+    <div class="chips">${Object.keys(ENFOQUES).map(k => chip(k)).join('')}</div>
+    <p class="hint" style="margin:0">${f.alcance === 'semana' ? 'Marca uno o varios. Aplica a todos los días de la semana.' : 'Marca uno o varios para el ' + DIAS[dia] + '. Toca otro día abajo para programarlo.'}</p>`;
+  box.querySelectorAll('[data-alc]').forEach(b => b.onclick = () => { f.alcance = b.dataset.alc; save(); renderTop() });
+  box.querySelectorAll('[data-enf]').forEach(b => b.onclick = () => {
+    const lista = f.alcance === 'semana' ? f.semana : (f.dias[dia] ||= []), k = b.dataset.enf, i = lista.indexOf(k);
+    i >= 0 ? lista.splice(i, 1) : lista.push(k); save(); renderEnfoque();
+  });
 }
 
 function renderAlumno() {
@@ -473,7 +518,9 @@ function renderCoach() {
     const ids = [...v.querySelectorAll('.asig:checked')].map(c => c.value);
     if (!ids.length) return toast('Marca al menos un alumno');
     ids.forEach(id => { const x = db.alumnos.find(y => y.id === id); x.semana ||= {};
-      if (semana) x.semana = JSON.parse(JSON.stringify(a.semana)); else x.semana[dia] = JSON.parse(JSON.stringify(d)) });
+      const fx = enfoqueDe(x), fa = enfoqueDe(a);
+      if (semana) { x.semana = JSON.parse(JSON.stringify(a.semana)); x.enfoque = JSON.parse(JSON.stringify(fa)) }
+      else { x.semana[dia] = JSON.parse(JSON.stringify(d)); if (fa.alcance === 'dia') { fx.alcance = 'dia'; fx.dias[dia] = [...(fa.dias[dia] || [])] } } });
     save(); toast(`Rutina asignada a ${ids.length} alumno${ids.length > 1 ? 's' : ''}`);
   };
   if ($('asig-dia')) { $('asig-dia').onclick = () => asignar(false); $('asig-sem').onclick = () => asignar(true) }

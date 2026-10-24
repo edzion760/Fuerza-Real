@@ -11,6 +11,8 @@ navegador del celular; los datos se guardan en ese navegador.
 ## Qué incluye
 
 **Entrenador**
+- Enfoque del entrenamiento con cuatro indicadores (Fuerza, Resistencia,
+  Hipertrofia, Cardio), para toda la semana o para cada día.
 - Rutina distinta por día (lunes a domingo), copiar un día a otro y asignar
   un día o la semana completa a varios alumnos.
 - Por ejercicio: cómo se mide (por repeticiones o por tiempo), máquina (dibujo dorado o foto real de la máquina del
