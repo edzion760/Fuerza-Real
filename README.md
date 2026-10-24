@@ -13,7 +13,7 @@ navegador del celular; los datos se guardan en ese navegador.
 **Entrenador**
 - Rutina distinta por día (lunes a domingo), copiar un día a otro y asignar
   un día o la semana completa a varios alumnos.
-- Por ejercicio: máquina (dibujo dorado o foto real de la máquina del
+- Por ejercicio: cómo se mide (por repeticiones o por tiempo), máquina (dibujo dorado o foto real de la máquina del
   gimnasio), series, repeticiones, tiempo de ejercicio, tiempo para oxigenar,
   descanso antes del siguiente y un mensaje de técnica.
 - Recomendaciones de alimentación, complementos y profesionales.
