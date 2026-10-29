@@ -155,8 +155,26 @@ details.card[open] > summary::after { content: "–" }
 .chip.ro { cursor: default }
 .chip.off { opacity: .35 }
 .seg.sm button { padding: 5px 10px; font-size: .8rem }
+.chip small { font-size: .66rem; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; opacity: .85 }
+.alc-row { display: grid; grid-template-columns: auto 1fr; gap: 4px 10px; align-items: center; padding: 8px 10px; border-radius: 12px; background: var(--surface) }
+.alc-row .seg { justify-self: end; flex-wrap: wrap }
+.alc-name { display: flex; align-items: center; gap: 6px; font-weight: 700; color: var(--gold-hi) }
+.alc-name svg { width: 18px; height: 18px }
+.alc-row small { grid-column: 1 / -1; color: var(--muted); font-size: .78rem }
+@media (max-width: 400px) { .alc-row { grid-template-columns: 1fr } .alc-row .seg { justify-self: start } }
 .label, .day-head .meta .num, .stat .num, .ring .count b, .p-name, .step .txt strong, .rec strong, .card strong {
   background: var(--oro); -webkit-background-clip: text; background-clip: text; color: transparent }
+/* Temporizador de intervalos: fondo negro y letras rojas */
+.int-row { grid-template-columns: 1fr auto; align-items: center }
+.btn.int-go { background: #000; border: 1px solid var(--red); color: var(--red-hi) }
+.player.int { background: #000; color: var(--red-hi) }
+.player.int .p-phase, .player.int .p-name, .player.int .p-msg, .player.int .num, .player.int .ring .count b, .player.int .ring .count small, .player.int .p-next, .player.int .p-next strong {
+  color: var(--red-hi) !important; background: none !important; -webkit-text-fill-color: currentColor }
+.player.int .ring circle:not(.arc) { stroke: #2a0b0d }
+.player.int .p-progress { background: #2a0b0d }
+.player.int .btn { background: #000 !important; border: 1px solid var(--red) !important; color: var(--red-hi) !important; box-shadow: none !important }
+.player.int .p-ctrl .main { border-width: 2px !important }
+.player.int .ico { color: var(--red-hi); background: #1d0607 }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important } }
 </style>
 </head>
@@ -198,11 +216,16 @@ details.card[open] > summary::after { content: "–" }
     <div class="seg" role="group" aria-label="Modo">
       <button id="m-alumno" aria-pressed="true">Alumno</button>
       <button id="m-coach" aria-pressed="false">Entrenador</button>
+      <button id="m-int" aria-pressed="false">Intervalos</button>
     </div>
   </header>
   <hr class="gold-rule">
 
-  <div class="field"><label class="label" for="sel-alumno">Alumno</label>
+  <div class="field" style="margin-bottom:12px"><label class="label" for="sel-coach">Entrenador</label>
+    <div class="row" style="flex-wrap:nowrap"><select id="sel-coach" style="flex:1"></select>
+      <button class="btn sm ghost" id="btn-coach-nuevo" hidden>+ Entrenador</button></div>
+  </div>
+  <div class="field" id="f-alumno"><label class="label" for="sel-alumno">Alumno</label>
     <div class="row" style="flex-wrap:nowrap"><select id="sel-alumno" style="flex:1"></select>
       <button class="btn sm ghost" id="btn-nuevo" hidden>+ Nuevo</button></div>
   </div>
@@ -211,6 +234,7 @@ details.card[open] > summary::after { content: "–" }
 
   <section id="v-alumno"></section>
   <section id="v-coach" hidden></section>
+  <section id="v-int" hidden></section>
 </div>
 
 <div class="player" id="player" hidden></div>
@@ -225,8 +249,8 @@ const KEY = 'pulso-coach-v1';
 const ej = (nombre, icono, series, reps, trabajo, oxigenar, cambio, mensaje, modo) => ({ nombre, icono, series, reps, trabajo, oxigenar, cambio, mensaje, modo: modo || (trabajo > 0 ? 'tiempo' : 'reps') });
 // Cada ejercicio se mide por repeticiones o por tiempo; los datos viejos sin modo se deducen del tiempo.
 const modoDe = e => e.modo || (+e.trabajo > 0 ? 'tiempo' : 'reps');
-function ejemplo() {
-  return { alumnos: [
+function alumnosEjemplo() {
+  return [
     { id: 'a1', nombre: 'Laura M. (ejemplo)', objetivo: 'Tonificar y bajar 4 kg',
       ficha: { estatura: 162, condiciones: '', molestias: 'Molestia en rodilla derecha al bajar escaleras.', consentimiento: true },
       medidas: [ { fecha: '2026-09-01', peso: 68.5, pecho: 92, cintura: 78, cadera: 101, brazo: 29, pierna: 58 },
@@ -234,7 +258,7 @@ function ejemplo() {
       recs: { dieta: 'Desayuno con proteína (huevos o yogur griego). 2,5 L de agua al día. Cena liviana antes de las 8 p. m.',
               suplemento: 'Proteína de suero después de entrenar, 1 porción. Consultar antes de sumar otros productos.',
               profesional: 'Valoración con fisioterapeuta por molestia en rodilla derecha. Te paso el contacto por WhatsApp.' },
-      enfoque: { alcance: 'dia', semana: [], dias: { 0: ['hipertrofia', 'fuerza'], 1: ['cardio', 'resistencia'], 2: ['fuerza'], 4: ['hipertrofia'] } },
+      enfoque: { items: { hipertrofia: { alcance: 'mes', desde: hoyLocal() }, cardio: { alcance: 'semana', desde: hoyLocal() }, fuerza: { alcance: 'dia', dias: [0, 2] }, resistencia: { alcance: 'dia', dias: [1] } } },
       semana: {
         0: { titulo: 'Pecho y tríceps', ejercicios: [
           ej('Press de banca', 'banco', 4, 12, 0, 60, 90, 'Baja la barra hasta el pecho, codos a 45°.'),
@@ -252,20 +276,37 @@ function ejemplo() {
           ej('Jalón al pecho', 'polea', 4, 12, 0, 60, 90, 'Saca el pecho y lleva los codos hacia abajo.'),
           ej('Curl con barra', 'barra', 3, 0, 40, 45, 0, 'Máximas repeticiones limpias en 40 segundos, sin balancear el cuerpo.') ] }
       } },
-    { id: 'a2', nombre: 'Andrés P. (ejemplo)', objetivo: 'Volumen', recs: {}, enfoque: { alcance: 'semana', semana: ['fuerza', 'hipertrofia'], dias: {} }, semana: {
+    { id: 'a2', nombre: 'Andrés P. (ejemplo)', objetivo: 'Volumen', recs: {}, enfoque: { items: { fuerza: { alcance: 'mes', desde: hoyLocal() }, hipertrofia: { alcance: 'mes', desde: hoyLocal() } } }, semana: {
         0: { titulo: 'Full body', ejercicios: [ ej('Peso muerto', 'barra', 5, 5, 0, 120, 120, 'Espalda neutra.'), ej('Dominadas', 'dominadas', 4, 8, 0, 90, 0, '') ] } } }
+  ];
+}
+const intervalosEjemplo = () => [
+  { id: 'i1', nombre: 'Tabata', trabajo: 20, descanso: 10, intervalos: 8 },
+  { id: 'i2', nombre: 'HIIT 40/20', trabajo: 40, descanso: 20, intervalos: 10 },
+  { id: 'i3', nombre: 'Cardio 60/30', trabajo: 60, descanso: 30, intervalos: 6 }];
+// Cada entrenador tiene su perfil con sus alumnos y sus temporizadores de intervalos.
+function ejemplo() {
+  return { coachId: 'c1', coaches: [
+    { id: 'c1', nombre: 'Fabián Romero', tel: '', alumnos: alumnosEjemplo(), intervalos: intervalosEjemplo() },
+    { id: 'c2', nombre: 'Entrenador de ejemplo', tel: '', intervalos: [{ id: 'i4', nombre: 'Circuito 30/15', trabajo: 30, descanso: 15, intervalos: 12 }],
+      alumnos: [{ id: 'a3', nombre: 'Carlos R. (ejemplo)', objetivo: 'Resistencia', recs: {}, semana: {
+        0: { titulo: 'Circuito', ejercicios: [ej('Sentadilla', 'rack', 3, 15, 0, 45, 60, 'Ritmo controlado.'), ej('Bicicleta', 'bicicleta', 1, 0, 300, 0, 0, 'Cadencia alta.')] } } }] }
   ] };
 }
 
 let db; try { db = JSON.parse(localStorage.getItem(KEY)) } catch (e) {}
-if (!db || !Array.isArray(db.alumnos) || !db.alumnos.length) db = ejemplo();
+// Datos guardados antes de los perfiles: todo pasa a ser el perfil de Fabián.
+if (db && Array.isArray(db.alumnos) && !db.coaches) db = { coachId: 'c1', coaches: [{ id: 'c1', nombre: 'Fabián Romero', tel: db.coachTel || '', alumnos: db.alumnos, intervalos: intervalosEjemplo() }] };
+if (!db || !Array.isArray(db.coaches) || !db.coaches.length) db = ejemplo();
+db.coaches.forEach(c => { if (!c.alumnos?.length) c.alumnos = [{ id: 'a' + Math.random().toString(36).slice(2), nombre: 'Alumno 1', objetivo: '', recs: {}, semana: {} }] });
+const coach = () => db.coaches.find(c => c.id === db.coachId) || db.coaches[0];
 const save = () => { try { localStorage.setItem(KEY, JSON.stringify(db)) } catch (e) {} };
 
 const hoy = (new Date().getDay() + 6) % 7;
-let modo = 'alumno', alumnoId = db.alumnos[0].id, dia = hoy;
+let modo = 'alumno', alumnoId = coach().alumnos[0].id, dia = hoy;
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[c]));
-const alumno = () => db.alumnos.find(a => a.id === alumnoId) || db.alumnos[0];
+const alumno = () => coach().alumnos.find(a => a.id === alumnoId) || coach().alumnos[0];
 const icon = (n, cls = '') => `<span class="ico ${cls}"><svg><use href="#i-${n}"/></svg></span>`;
 // Imagen de la máquina: la foto que subió el entrenador o el dibujo de la máquina.
 const maqKey = k => MAQUINAS[k] ? k : (VIEJOS[k] || 'mancuernas');
@@ -293,39 +334,68 @@ function pasos(d) {
 const duracion = d => pasos(d).reduce((t, p) => t + (p.seg || (p.tipo === 'work' ? Math.max(20, p.reps * 3) : 0)), 0);
 
 function renderTop() {
-  $('sel-alumno').innerHTML = db.alumnos.map(a => `<option value="${a.id}" ${a.id === alumnoId ? 'selected' : ''}>${esc(a.nombre)}</option>`).join('');
+  $('sel-alumno').innerHTML = coach().alumnos.map(a => `<option value="${a.id}" ${a.id === alumnoId ? 'selected' : ''}>${esc(a.nombre)}</option>`).join('');
   const sem = alumno().semana || {};
   $('days').innerHTML = DIAS.map((n, i) => `<button data-d="${i}" aria-pressed="${i === dia}" class="${sem[i]?.ejercicios?.length ? 'has' : ''}"><b>${n}</b><i></i></button>`).join('');
-  $('btn-nuevo').hidden = modo !== 'coach';
-  $('m-alumno').setAttribute('aria-pressed', modo === 'alumno'); $('m-coach').setAttribute('aria-pressed', modo === 'coach');
-  $('v-alumno').hidden = modo !== 'alumno'; $('v-coach').hidden = modo !== 'coach';
+  $('sel-coach').innerHTML = db.coaches.map(c => `<option value="${c.id}" ${c.id === coach().id ? 'selected' : ''}>${esc(c.nombre)}</option>`).join('');
+  $('btn-nuevo').hidden = $('btn-coach-nuevo').hidden = modo !== 'coach';
+  $('m-alumno').setAttribute('aria-pressed', modo === 'alumno'); $('m-coach').setAttribute('aria-pressed', modo === 'coach'); $('m-int').setAttribute('aria-pressed', modo === 'int');
+  $('v-alumno').hidden = modo !== 'alumno'; $('v-coach').hidden = modo !== 'coach'; $('v-int').hidden = modo !== 'int';
+  $('f-alumno').hidden = $('days').hidden = modo === 'int';
+  if (modo === 'int') { $('enfoque').innerHTML = ''; return renderInt() }
   renderEnfoque();
   modo === 'alumno' ? renderAlumno() : renderCoach();
 }
 
-// Indicadores de enfoque: para toda la semana o para cada día.
+// Indicadores de enfoque. Cada uno tiene su propio alcance: días sueltos, toda la semana o todo el mes.
 const ENFOQUES = { fuerza: 'Fuerza', resistencia: 'Resistencia', hipertrofia: 'Hipertrofia', cardio: 'Cardio' };
-const enfoqueDe = a => (a.enfoque ||= { alcance: 'semana', semana: [], dias: {} });
-const enfoqueActivo = (a, d) => { const f = enfoqueDe(a); return f.alcance === 'semana' ? f.semana : (f.dias[d] || []) };
+const ALCANCES = { dia: 'Este día', semana: 'Toda la semana', mes: 'Todo el mes' };
+function hoyLocal() { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 10) }
+const fechaCorta = d => d.toLocaleDateString('es-CO', { day: 'numeric', month: 'short' });
+function finDe(it) { const d = new Date(it.desde + 'T00:00'); it.alcance === 'semana' ? d.setDate(d.getDate() + 7) : d.setMonth(d.getMonth() + 1); return d }
+function enfoqueDe(a) {
+  let f = a.enfoque;
+  if (!f || !f.items) { // formato anterior: un solo alcance para todos los indicadores
+    const items = {};
+    if (f?.alcance === 'semana') (f.semana || []).forEach(k => items[k] = { alcance: 'semana', desde: hoyLocal() });
+    else Object.entries(f?.dias || {}).forEach(([d, ks]) => ks.forEach(k => (items[k] ||= { alcance: 'dia', dias: [] }).dias.push(+d)));
+    f = a.enfoque = { items };
+  }
+  return f;
+}
+const aplica = (it, d) => !!it && (it.alcance === 'dia' ? (it.dias || []).includes(d) : new Date() < finDe(it));
+const enfoqueActivo = (a, d) => Object.keys(ENFOQUES).filter(k => aplica(enfoqueDe(a).items[k], d));
+const detalleAlcance = it => it.alcance === 'dia'
+  ? (it.dias.length > 1 ? 'Días: ' + [...it.dias].sort().map(i => DIAS[i]).join(', ') : 'Solo el ' + DIAS[it.dias[0]])
+  : `${ALCANCES[it.alcance]} · hasta el ${fechaCorta(finDe(it))}`;
 function renderEnfoque() {
-  const a = alumno(), f = enfoqueDe(a), act = enfoqueActivo(a, dia), box = $('enfoque');
-  const chip = (k, ro) => `<button class="chip${ro ? ' ro' : ''}${ro && !act.includes(k) ? ' off' : ''}" data-enf="${k}" aria-pressed="${act.includes(k)}" ${ro ? 'tabindex="-1"' : ''}><svg aria-hidden="true"><use href="#e-${k}"/></svg>${ENFOQUES[k]}</button>`;
+  const a = alumno(), items = enfoqueDe(a).items, act = enfoqueActivo(a, dia), box = $('enfoque');
+  const corto = { dia: 'Este día', semana: 'Semana', mes: 'Mes' };
+  const chip = (k, ro) => `<button class="chip${ro ? ' ro' : ''}${ro && !act.includes(k) ? ' off' : ''}" data-enf="${k}" aria-pressed="${act.includes(k)}" ${ro ? 'tabindex="-1"' : ''}><svg aria-hidden="true"><use href="#e-${k}"/></svg>${ENFOQUES[k]}${act.includes(k) ? `<small>${corto[items[k].alcance]}</small>` : ''}</button>`;
   if (modo === 'alumno') {
-    box.innerHTML = act.length ? `<span class="label">Enfoque ${f.alcance === 'semana' ? 'de la semana' : 'del ' + DIAS[dia]}</span><div class="chips">${Object.keys(ENFOQUES).map(k => chip(k, true)).join('')}</div>` : '';
+    box.innerHTML = act.length ? `<span class="label">Enfoque del ${DIAS[dia]}</span><div class="chips">${Object.keys(ENFOQUES).map(k => chip(k, true)).join('')}</div>` : '';
     return;
   }
   box.innerHTML = `
-    <div class="enf-head"><span class="label">Enfoque ${f.alcance === 'semana' ? 'de toda la semana' : 'del ' + DIAS[dia]}</span>
-      <div class="seg sm" role="group" aria-label="Aplica a">
-        <button data-alc="semana" aria-pressed="${f.alcance === 'semana'}">Semana completa</button>
-        <button data-alc="dia" aria-pressed="${f.alcance === 'dia'}">Por día</button>
-      </div></div>
+    <span class="label">Enfoque del ${DIAS[dia]} · puedes marcar varios</span>
     <div class="chips">${Object.keys(ENFOQUES).map(k => chip(k)).join('')}</div>
-    <p class="hint" style="margin:0">${f.alcance === 'semana' ? 'Marca uno o varios. Aplica a todos los días de la semana.' : 'Marca uno o varios para el ' + DIAS[dia] + '. Toca otro día abajo para programarlo.'}</p>`;
-  box.querySelectorAll('[data-alc]').forEach(b => b.onclick = () => { f.alcance = b.dataset.alc; save(); renderTop() });
+    ${act.map(k => `<div class="alc-row">
+      <span class="alc-name"><svg aria-hidden="true"><use href="#e-${k}"/></svg>${ENFOQUES[k]}</span>
+      <div class="seg sm" role="group" aria-label="Duración de ${ENFOQUES[k]}">${Object.entries(ALCANCES).map(([v, t]) => `<button data-k="${k}" data-alc="${v}" aria-pressed="${items[k].alcance === v}">${t}</button>`).join('')}</div>
+      <small>${detalleAlcance(items[k])}</small></div>`).join('')}
+    <p class="hint" style="margin:0">${act.length ? 'Elige cuánto dura cada indicador. “Este día” se suma día por día: toca otro día abajo y márcalo también.' : 'Toca un indicador para marcarlo y luego elige si es para este día, toda la semana o todo el mes.'}</p>`;
   box.querySelectorAll('[data-enf]').forEach(b => b.onclick = () => {
-    const lista = f.alcance === 'semana' ? f.semana : (f.dias[dia] ||= []), k = b.dataset.enf, i = lista.indexOf(k);
-    i >= 0 ? lista.splice(i, 1) : lista.push(k); save(); renderEnfoque();
+    const k = b.dataset.enf, it = items[k];
+    if (aplica(it, dia)) {
+      if (it.alcance === 'dia') { it.dias = it.dias.filter(x => x !== dia); if (!it.dias.length) delete items[k] } else delete items[k];
+    } else if (it?.alcance === 'dia') it.dias.push(dia);
+    else items[k] = { alcance: 'dia', dias: [dia] };
+    save(); renderEnfoque();
+  });
+  box.querySelectorAll('[data-alc]').forEach(b => b.onclick = () => {
+    const k = b.dataset.k, v = b.dataset.alc;
+    items[k] = v === 'dia' ? { alcance: 'dia', dias: [dia] } : { alcance: v, desde: hoyLocal() };
+    save(); renderEnfoque();
   });
 }
 
@@ -368,7 +438,7 @@ function renderAlumno() {
     try {
       if (navigator.canShare?.({ files: [video] })) { await navigator.share({ files: [video], text: texto }); return }
     } catch (e) { if (e.name === 'AbortError') return }
-    const tel = (db.coachTel || '').replace(/\D/g, ''), help = $('v-help');
+    const tel = (coach().tel || '').replace(/\D/g, ''), help = $('v-help');
     help.hidden = false;
     help.innerHTML = `Este navegador no deja adjuntar el video directamente. El video quedó en la galería de tu celular: abre WhatsApp${tel ? ` con <a href="https://wa.me/${tel}?text=${encodeURIComponent(texto)}" target="_blank" rel="noopener">tu entrenador (+${tel})</a>` : ''} y adjúntalo desde ahí.`;
   };
@@ -444,6 +514,11 @@ function renderCoach() {
       </div>
     </div>`).join('');
   $('v-coach').innerHTML = `
+    <div class="card" style="margin-bottom:14px"><span class="label">Perfil del entrenador</span>
+      <div class="row" style="flex-wrap:nowrap">
+        <div class="field" style="flex:1"><label class="label" for="c-nombre">Nombre</label><input id="c-nombre" value="${esc(coach().nombre)}"></div>
+        <div class="field" style="flex:1"><label class="label" for="c-tel">WhatsApp (recibe videos)</label><input id="c-tel" inputmode="tel" value="${esc(coach().tel)}" placeholder="Ej. 573001234567"></div>
+      </div></div>
     <div class="row" style="margin-bottom:14px;flex-wrap:nowrap">
       <div class="field" style="flex:1"><label class="label" for="a-nombre">Nombre del alumno</label><input id="a-nombre" value="${esc(a.nombre)}"></div>
       <div class="field" style="flex:1"><label class="label" for="a-obj">Objetivo</label><input id="a-obj" value="${esc(a.objetivo)}" placeholder="Ej. Bajar 4 kg"></div>
@@ -459,8 +534,8 @@ function renderCoach() {
 
     <h3 class="section-title">Misma rutina a varios alumnos</h3>
     <div class="card">
-      ${db.alumnos.length > 1 ? `<p class="hint">Marca los alumnos que recibirán esta rutina. Se les copia y luego puedes ajustar a cada uno por separado.</p>
-      <div>${db.alumnos.filter(x => x.id !== a.id).map(x => `<label class="chk"><input type="checkbox" class="asig" value="${x.id}"> ${esc(x.nombre)}</label>`).join('')}</div>
+      ${coach().alumnos.length > 1 ? `<p class="hint">Marca los alumnos que recibirán esta rutina. Se les copia y luego puedes ajustar a cada uno por separado.</p>
+      <div>${coach().alumnos.filter(x => x.id !== a.id).map(x => `<label class="chk"><input type="checkbox" class="asig" value="${x.id}"> ${esc(x.nombre)}</label>`).join('')}</div>
       <div class="row"><button class="btn sm" id="asig-dia">Asignar el ${DIAS[dia]}</button><button class="btn sm ghost" id="asig-sem">Asignar la semana completa</button></div>`
       : '<p class="hint">Crea más alumnos con “+ Nuevo” para asignarles esta misma rutina.</p>'}
     </div>
@@ -475,7 +550,6 @@ function renderCoach() {
     <h3 class="section-title">Enviar al alumno</h3>
     <div class="card">
       <p class="hint">En el prototipo la rutina viaja como un código que el alumno pega en su celular. En la app real llegará sola a su cuenta.</p>
-      <div class="field"><label class="label" for="c-tel">Tu WhatsApp (para recibir videos)</label><input id="c-tel" inputmode="tel" value="${esc(db.coachTel)}" placeholder="Ej. 573001234567"></div>
       <div class="row"><button class="btn sm" id="share">Copiar código de ${esc(a.nombre)}</button></div>
       <div class="code" id="code" hidden></div>
       <div class="field"><label class="label" for="imp">Pegar un código recibido</label><textarea id="imp" placeholder="Pega aquí el código"></textarea></div>
@@ -513,14 +587,21 @@ function renderCoach() {
   $('add').onclick = () => { d.ejercicios.push(ej('', 'mancuernas', 3, 12, 0, 60, 90, '', 'reps')); save(); renderTop(); $('nm' + (d.ejercicios.length - 1))?.focus() };
   $('preview').onclick = () => { modo = 'alumno'; renderTop() };
   $('copy-to').onchange = e => { if (e.target.value === '') return; a.semana[e.target.value] = JSON.parse(JSON.stringify(d)); save(); toast(`Copiado al ${DIAS[e.target.value]}`); renderTop() };
-  $('c-tel').oninput = e => { db.coachTel = e.target.value; save() };
+  $('c-tel').oninput = e => { coach().tel = e.target.value; save() };
+  $('c-nombre').oninput = e => { coach().nombre = e.target.value; save(); $('sel-coach').selectedOptions[0].textContent = coach().nombre };
   const asignar = semana => {
     const ids = [...v.querySelectorAll('.asig:checked')].map(c => c.value);
     if (!ids.length) return toast('Marca al menos un alumno');
-    ids.forEach(id => { const x = db.alumnos.find(y => y.id === id); x.semana ||= {};
-      const fx = enfoqueDe(x), fa = enfoqueDe(a);
-      if (semana) { x.semana = JSON.parse(JSON.stringify(a.semana)); x.enfoque = JSON.parse(JSON.stringify(fa)) }
-      else { x.semana[dia] = JSON.parse(JSON.stringify(d)); if (fa.alcance === 'dia') { fx.alcance = 'dia'; fx.dias[dia] = [...(fa.dias[dia] || [])] } } });
+    ids.forEach(id => { const x = coach().alumnos.find(y => y.id === id); x.semana ||= {};
+      const fx = enfoqueDe(x).items, fa = enfoqueDe(a).items;
+      if (semana) { x.semana = JSON.parse(JSON.stringify(a.semana)); x.enfoque = JSON.parse(JSON.stringify(enfoqueDe(a))) }
+      else {
+        x.semana[dia] = JSON.parse(JSON.stringify(d));
+        Object.entries(fa).forEach(([k, it]) => { if (!aplica(it, dia)) return;
+          if (it.alcance !== 'dia') fx[k] = { ...it };
+          else if (fx[k]?.alcance === 'dia') { if (!fx[k].dias.includes(dia)) fx[k].dias.push(dia) }
+          else fx[k] = { alcance: 'dia', dias: [dia] } });
+      } });
     save(); toast(`Rutina asignada a ${ids.length} alumno${ids.length > 1 ? 's' : ''}`);
   };
   if ($('asig-dia')) { $('asig-dia').onclick = () => asignar(false); $('asig-sem').onclick = () => asignar(true) }
@@ -534,10 +615,10 @@ function renderCoach() {
       const raw = $('imp').value.trim().replace(/^PULSO1\./, '');
       const nuevo = JSON.parse(decodeURIComponent(escape(atob(raw))));
       if (!nuevo.semana) throw 0;
-      nuevo.id = 'a' + Date.now(); db.alumnos.push(nuevo); alumnoId = nuevo.id; save(); toast('Rutina importada'); renderTop();
+      nuevo.id = 'a' + Date.now(); coach().alumnos.push(nuevo); alumnoId = nuevo.id; save(); toast('Rutina importada'); renderTop();
     } catch (e) { toast('Ese código no es válido. Cópialo completo.') }
   };
-  $('reset').onclick = () => { db = ejemplo(); alumnoId = db.alumnos[0].id; save(); toast('Ejemplo restaurado'); renderTop() };
+  $('reset').onclick = () => { db = ejemplo(); alumnoId = coach().alumnos[0].id; save(); toast('Ejemplo restaurado'); renderTop() };
 }
 
 // Reduce la foto a una miniatura cuadrada para que quepa en el celular y en el código para compartir.
@@ -554,6 +635,57 @@ function miniatura(file, lado = 240) {
   });
 }
 
+// ---------- Temporizador de intervalos ----------
+let intForm = { id: null, nombre: 'Tabata', trabajo: 20, descanso: 10, intervalos: 8 };
+const totalInt = t => 10 + t.intervalos * t.trabajo + Math.max(0, t.intervalos - 1) * t.descanso;
+function pasosInt(t) {
+  const seq = [{ tipo: 'switch', nombre: 'Prepárate', seg: 10, icono: 'cambio', msg: `${t.nombre}: ${t.intervalos} intervalos de ${t.trabajo} s` }];
+  for (let i = 1; i <= t.intervalos; i++) {
+    seq.push({ tipo: 'work', nombre: '¡Ejercicio!', seg: t.trabajo, serie: i, series: t.intervalos, icono: 'cardio', sinMaq: true, fase: 'Ejercicio' });
+    if (i < t.intervalos && t.descanso) seq.push({ tipo: 'breathe', nombre: 'Recupera', seg: t.descanso, icono: 'aire', serie: i + 1, series: t.intervalos, fase: 'Recuperación', msg: `Sigue el intervalo ${i + 1} de ${t.intervalos}` });
+  }
+  seq.push({ tipo: 'done', nombre: '¡Intervalos terminados!', icono: 'listo', seg: 0, msg: 'Buen trabajo. Respira y estira.' });
+  return seq;
+}
+function renderInt() {
+  const c = coach(), lista = (c.intervalos ||= []), f = intForm;
+  $('v-int').innerHTML = `
+    <h2 class="section-title" style="margin-top:6px">Temporizador de intervalos</h2>
+    <div class="card">
+      <div class="field"><label class="label" for="it-nombre">Nombre</label><input id="it-nombre" data-it="nombre" value="${esc(f.nombre)}" placeholder="Ej. Tabata"></div>
+      <div class="grid3">
+        <div class="field"><label class="label" for="it-trabajo">Ejercicio (s)</label><input id="it-trabajo" data-it="trabajo" type="number" min="1" inputmode="numeric" value="${f.trabajo}"></div>
+        <div class="field"><label class="label" for="it-descanso">Recuperación (s)</label><input id="it-descanso" data-it="descanso" type="number" min="0" inputmode="numeric" value="${f.descanso}"></div>
+        <div class="field"><label class="label" for="it-n">Intervalos</label><input id="it-n" data-it="intervalos" type="number" min="1" inputmode="numeric" value="${f.intervalos}"></div>
+      </div>
+      <p class="hint" id="it-total" style="margin:0">Duración total: ${fmt(totalInt(f))} (incluye 10 s para prepararse)</p>
+      <button class="btn primary" id="it-go" style="margin:4px 0 0">Iniciar</button>
+      <button class="btn ghost" id="it-save">${f.id ? 'Guardar cambios' : 'Guardar en ' + esc(c.nombre)}</button>
+    </div>
+    <h3 class="section-title">Guardados de ${esc(c.nombre)}</h3>
+    <div class="ex-list">${lista.length ? lista.map(t => `
+      <div class="card int-row" data-id="${t.id}">
+        <div style="min-width:0"><strong>${esc(t.nombre)}</strong><span class="hint" style="display:block">${t.trabajo} s ejercicio · ${t.descanso} s recuperación · ${t.intervalos} intervalos · ${fmt(totalInt(t))}</span></div>
+        <div class="tools"><button class="btn sm ghost" data-ia="edit">Editar</button><button class="btn sm ghost" data-ia="del" aria-label="Borrar">✕</button><button class="btn sm int-go" data-ia="go">Iniciar</button></div>
+      </div>`).join('') : '<div class="empty">Todavía no hay temporizadores guardados.</div>'}</div>`;
+  $('v-int').querySelectorAll('[data-it]').forEach(inp => inp.oninput = e => {
+    const k = e.target.dataset.it; f[k] = k === 'nombre' ? e.target.value : Math.max(k === 'descanso' ? 0 : 1, +e.target.value || 0);
+    $('it-total').textContent = `Duración total: ${fmt(totalInt(f))} (incluye 10 s para prepararse)`;
+  });
+  $('it-go').onclick = () => startPlayer(pasosInt(f), true);
+  $('it-save').onclick = () => {
+    const t = { ...f, nombre: f.nombre.trim() || 'Intervalos' };
+    if (t.id) lista[lista.findIndex(x => x.id === t.id)] = t; else { t.id = 'i' + Date.now(); lista.push(t) }
+    intForm = { ...t }; save(); renderInt(); toast('Temporizador guardado');
+  };
+  $('v-int').querySelectorAll('[data-ia]').forEach(b => b.onclick = () => {
+    const i = lista.findIndex(x => x.id === b.closest('[data-id]').dataset.id), t = lista[i];
+    if (b.dataset.ia === 'go') startPlayer(pasosInt(t), true);
+    else if (b.dataset.ia === 'edit') { intForm = { ...t }; renderInt(); window.scrollTo({ top: 0, behavior: 'smooth' }) }
+    else { lista.splice(i, 1); if (intForm.id === t.id) intForm.id = null; save(); renderInt(); toast('Temporizador borrado') }
+  });
+}
+
 // ---------- Reproductor ----------
 let P = null, ac = null, lock = null;
 function beep(f = 880, ms = 120, vol = .25) {
@@ -566,9 +698,9 @@ function decir(t) { if (!P?.voz) return; try { speechSynthesis.cancel(); const u
 const COLOR = { work: 'var(--work)', breathe: 'var(--breathe)', switch: 'var(--switch)', done: 'var(--done)' };
 const FASE = { work: 'Ejercicio', breathe: 'Oxigenar', switch: 'Transición', done: 'Fin' };
 
-function startPlayer(seq) {
-  P = { seq, i: 0, left: seq[0].seg, end: 0, pausado: false, voz: true };
-  $('player').hidden = false; document.body.style.overflow = 'hidden';
+function startPlayer(seq, intervalos = false) {
+  P = { seq, i: 0, left: seq[0].seg, end: 0, pausado: false, voz: true, int: intervalos };
+  $('player').classList.toggle('int', intervalos); $('player').hidden = false; document.body.style.overflow = 'hidden';
   navigator.wakeLock?.request('screen').then(l => lock = l, () => {});
   beep(660, 80); go(0);
   P.tick = setInterval(tick, 200);
@@ -577,7 +709,8 @@ function stopPlayer() { clearInterval(P?.tick); P = null; $('player').hidden = t
 function go(i) {
   if (i < 0) i = 0; if (i >= P.seq.length) i = P.seq.length - 1;
   P.i = i; const p = P.seq[i]; P.left = p.seg; P.end = Date.now() + p.seg * 1000; P.lastBeep = null;
-  if (p.tipo === 'work') decir(`${p.nombre}. Serie ${p.serie} de ${p.series}${p.reps ? `, ${p.reps} repeticiones` : `, ${p.seg} segundos`}`);
+  if (p.tipo === 'work' && P.int) decir(`Intervalo ${p.serie} de ${p.series}. Ejercicio`);
+  else if (p.tipo === 'work') decir(`${p.nombre}. Serie ${p.serie} de ${p.series}${p.reps ? `, ${p.reps} repeticiones` : `, ${p.seg} segundos`}`);
   else if (p.tipo === 'done') { decir('Rutina terminada. Buen trabajo'); beep(523, 150); setTimeout(() => beep(784, 300), 180); navigator.vibrate?.([200, 100, 200]) }
   else decir(`${p.nombre}, ${p.seg} segundos`);
   drawPlayer();
@@ -594,7 +727,7 @@ function tick() {
 function drawPlayer(soloTiempo) {
   const p = P.seq[P.i], el = $('player'), R = 140, C = 2 * Math.PI * R;
   const frac = p.seg ? P.left / p.seg : (p.tipo === 'done' ? 0 : 1);
-  el.style.setProperty('--c', COLOR[p.tipo]);
+  el.style.setProperty('--c', P.int ? (p.tipo === 'work' ? 'var(--red-hi)' : '#9e1b22') : COLOR[p.tipo]);
   if (soloTiempo && el.querySelector('.count')) {
     el.querySelector('.count b').textContent = fmt(P.left).replace(/s$/, '');
     el.querySelector('.arc').style.strokeDashoffset = C * (1 - frac); return;
@@ -610,15 +743,15 @@ function drawPlayer(soloTiempo) {
       <span class="num" style="color:var(--muted)">${hechos}/${total}</span>
       <button class="btn sm ghost" id="p-voz" aria-pressed="${P.voz}">${P.voz ? 'Voz sí' : 'Voz no'}</button></div>
     <div class="p-main">
-      <div class="p-phase">${FASE[p.tipo]}${p.serie ? ` · Serie ${p.serie}/${p.series}` : ''}</div>
+      <div class="p-phase">${p.fase || FASE[p.tipo]}${p.serie ? ` · ${P.int ? '' : 'Serie '}${p.serie}/${p.series}` : ''}</div>
       <div class="ring"><svg viewBox="0 0 320 320"><circle cx="160" cy="160" r="${R}" fill="none" stroke="var(--surface-2)" stroke-width="16"/>
         <circle class="arc" cx="160" cy="160" r="${R}" fill="none" stroke="var(--c)" stroke-width="16" stroke-linecap="round" stroke-dasharray="${C}" stroke-dashoffset="${C * (1 - frac)}" style="transition:stroke-dashoffset .25s linear"/></svg>
         <div class="count">${centro}</div></div>
-      ${p.tipo === 'work' ? maq(p, 'lg') : ''}
+      ${p.tipo === 'work' && !p.sinMaq ? maq(p, 'lg') : ''}
       <h2 class="p-name">${esc(p.nombre)}</h2>
       <p class="p-msg">${esc(p.msg || '')}</p>
     </div>
-    ${p.tipo !== 'done' ? `<div class="p-next t-${sig.tipo}">${sig.tipo === 'work' ? maq(sig) : icon(sig.icono)}<span>Después: <strong style="color:var(--fg)">${esc(sig.nombre)}</strong>${sig.seg ? ' · ' + fmt(sig.seg) : ''}</span></div>` : '<div></div>'}
+    ${p.tipo !== 'done' ? `<div class="p-next t-${sig.tipo}">${sig.tipo === 'work' && !sig.sinMaq ? maq(sig) : icon(sig.icono)}<span>Después: <strong style="color:var(--fg)">${esc(sig.nombre)}</strong>${sig.seg ? ' · ' + fmt(sig.seg) : ''}</span></div>` : '<div></div>'}
     <div class="p-ctrl">
       <button class="btn" id="p-prev">Atrás</button>
       ${p.tipo === 'done' ? `<button class="btn main" id="p-fin">Cerrar</button>`
@@ -637,9 +770,17 @@ function drawPlayer(soloTiempo) {
 
 $('m-alumno').onclick = () => { modo = 'alumno'; renderTop() };
 $('m-coach').onclick = () => { modo = 'coach'; renderTop() };
+$('m-int').onclick = () => { modo = 'int'; renderTop() };
+$('sel-coach').onchange = e => { db.coachId = e.target.value; alumnoId = coach().alumnos[0].id; save(); renderTop() };
+$('btn-coach-nuevo').onclick = () => {
+  const c = { id: 'c' + Date.now(), nombre: `Entrenador ${db.coaches.length + 1}`, tel: '', intervalos: intervalosEjemplo(),
+    alumnos: [{ id: 'a' + Date.now(), nombre: 'Alumno 1', objetivo: '', recs: {}, semana: {} }] };
+  db.coaches.push(c); db.coachId = c.id; alumnoId = c.alumnos[0].id; save(); renderTop();
+  toast('Perfil creado. Escribe el nombre del entrenador.'); $('c-nombre')?.select();
+};
 $('sel-alumno').onchange = e => { alumnoId = e.target.value; renderTop() };
 $('days').onclick = e => { const b = e.target.closest('[data-d]'); if (b) { dia = +b.dataset.d; renderTop() } };
-$('btn-nuevo').onclick = () => { const a = { id: 'a' + Date.now(), nombre: `Alumno ${db.alumnos.length + 1}`, objetivo: '', recs: {}, semana: {} }; db.alumnos.push(a); alumnoId = a.id; save(); renderTop(); toast('Alumno creado'); $('a-nombre')?.select() };
+$('btn-nuevo').onclick = () => { const a = { id: 'a' + Date.now(), nombre: `Alumno ${coach().alumnos.length + 1}`, objetivo: '', recs: {}, semana: {} }; coach().alumnos.push(a); alumnoId = a.id; save(); renderTop(); toast('Alumno creado'); $('a-nombre')?.select() };
 renderTop();
 </script>
 </body>
