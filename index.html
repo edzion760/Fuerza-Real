@@ -213,6 +213,14 @@ details.card[open] > summary::after { content: "–" }
 .obs-box summary { cursor: pointer; font-weight: 700; color: var(--gold-hi) }
 .obs-box textarea { margin-top: 6px }
 .p-obs { color: var(--gold-hi) }
+.btn.sos { width: 100%; margin-top: 10px; background: #1a0607 !important; border: 1px solid var(--red) !important; color: var(--red-hi) !important }
+.btn.sm.sos { width: auto; margin: 6px 0 0 }
+.pill.sos-pill { border-color: var(--red); color: var(--red-hi); background: none }
+.sos-opts { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px }
+.sos-op { display: grid; justify-items: center; gap: 4px; padding: 14px 8px; border-radius: 14px; font-weight: 700; border: 1px solid var(--red); background: #140405; color: var(--fg) }
+.sos-op span { font-size: 2rem }
+.sos-op[aria-pressed="true"] { background: var(--red); color: #fff }
+.sos-tip { margin: 0 0 10px; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--red); color: var(--red-hi); font-weight: 600 }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important } }
 </style>
 </head>
@@ -278,6 +286,7 @@ details.card[open] > summary::after { content: "–" }
 
 <div class="sheet" id="lib" hidden></div>
 <div class="sheet" id="asig" hidden></div>
+<div class="sheet" id="sosv" hidden></div>
 <div class="player" id="player" hidden></div>
 <div class="toast" id="toast" hidden></div>
 
@@ -396,7 +405,7 @@ function hablar(t) { try { speechSynthesis.cancel(); const u = new SpeechSynthes
 const instruccion = p => `${p.nombre}. ${p.reps ? p.reps + ' repeticiones.' : p.seg ? p.seg + ' segundos.' : ''} ${p.msg || 'Pregúntale a tu entrenador cómo se hace este ejercicio.'} ${p.obs ? 'Observación: ' + p.obs : ''}`;
 function alumnosEjemplo() {
   return [
-    { id: 'a1', nombre: 'Laura M. (ejemplo)', objetivo: 'Tonificar y bajar 4 kg',
+    { id: 'a1', conDieta: true, nombre: 'Laura M. (ejemplo)', objetivo: 'Tonificar y bajar 4 kg',
       ficha: { talla: 'M', estatura: 162, condiciones: '', molestias: 'Molestia en rodilla derecha al bajar escaleras.', consentimiento: true },
       medidas: [ { fecha: '2026-09-01', peso: 68.5, cPelvica: 78, cEscapular: 104, cadera: 101, brazo: 29, pierna: 58 },
                  { fecha: '2026-10-01', peso: 66.9, cPelvica: 75, cEscapular: 103, cadera: 99, brazo: 29.5, pierna: 57 } ],
@@ -422,7 +431,7 @@ function alumnosEjemplo() {
           ej('Jalón al pecho', 'polea', 4, 12, 0, 60, 90, 'Saca el pecho y lleva los codos hacia abajo.'),
           ej('Curl con barra', 'barra', 3, 0, 40, 45, 0, 'Máximas repeticiones limpias en 40 segundos, sin balancear el cuerpo.') ] }
       } },
-    { id: 'a2', nombre: 'Andrés P. (ejemplo)', objetivo: 'Volumen', recs: {}, enfoque: { items: { fuerza: { alcance: 'mes', desde: hoyLocal() }, hipertrofia: { alcance: 'mes', desde: hoyLocal() } } }, semana: {
+    { id: 'a2', conDieta: false, nombre: 'Andrés P. (ejemplo)', objetivo: 'Volumen', recs: {}, enfoque: { items: { fuerza: { alcance: 'mes', desde: hoyLocal() }, hipertrofia: { alcance: 'mes', desde: hoyLocal() } } }, semana: {
         0: { titulo: 'Full body', ejercicios: [ ej('Peso muerto', 'barra', 5, 5, 0, 120, 120, 'Espalda neutra.'), ej('Dominadas', 'dominadas', 4, 8, 0, 90, 0, '') ] } } }
   ];
 }
@@ -445,6 +454,8 @@ function ejemplo() {
 }
 
 // La rutina que el coach asigna vale solo el día en que la asigna: a las 12 de la noche desaparece.
+// La dieta solo le aparece al alumno marcado “con dieta”.
+const tieneDieta = a => a.conDieta ?? !!a.recs?.dieta;
 const rutinaDeHoy = a => a.asignada?.fecha === hoyLocal() ? a.asignada : null;
 let db; try { db = JSON.parse(localStorage.getItem(KEY)) } catch (e) {}
 // Datos guardados antes de los perfiles: todo pasa a ser el perfil de Fabián.
@@ -486,7 +497,7 @@ function pasos(d) {
 const duracion = d => pasos(d).reduce((t, p) => t + (p.seg || (p.tipo === 'work' ? Math.max(20, p.reps * 3) : 0)), 0);
 
 function renderTop() {
-  $('sel-alumno').innerHTML = coach().alumnos.map(a => `<option value="${a.id}" ${a.id === alumnoId ? 'selected' : ''}>${esc(a.nombre)}</option>`).join('');
+  $('sel-alumno').innerHTML = coach().alumnos.map(a => `<option value="${a.id}" ${a.id === alumnoId ? 'selected' : ''}>${esc(a.nombre)}${modo === 'coach' && tieneDieta(a) ? ' · 🥗 con dieta' : ''}</option>`).join('');
   const sem = alumno().semana || {};
   $('days').innerHTML = DIAS.map((n, i) => `<button data-d="${i}" aria-pressed="${i === dia}" class="${sem[i]?.ejercicios?.length ? 'has' : ''}"><b>${n}</b><i></i></button>`).join('');
   $('sel-coach').innerHTML = db.coaches.map(c => `<option value="${c.id}" ${c.id === coach().id ? 'selected' : ''}>${esc(c.nombre)}</option>`).join('');
@@ -569,9 +580,9 @@ function renderAlumno() {
           <div class="obs-al" id="obs-${p.ei}" hidden>${p.obs ? `<p><strong>Tu entrenador:</strong> ${esc(p.obs)}</p>` : '<p class="hint" style="margin:0">Tu entrenador no dejó observaciones para este ejercicio.</p>'}
             <textarea data-obsal="${p.ei}" aria-label="Mi observación para el entrenador" placeholder="Escribe cómo te fue o qué sentiste (lo verá tu entrenador)">${esc(d.ejercicios[p.ei].obsAlumno)}</textarea></div>` : ''}</div><span class="t">${p.seg ? fmt(p.seg) : `${p.reps || '—'} reps`}</span></li>`
         : `<li class="step small t-${p.tipo}">${icon(p.icono)}<div class="txt"><span>${esc(p.nombre)}</span></div><span class="t">${fmt(p.seg)}</span></li>`).join('') +
-      `</ol><button class="btn primary" id="start">Empezar rutina</button>`;
+      `</ol><button class="btn primary" id="start">Empezar rutina</button><button class="btn sos" id="sos">🆘 Reportar dolor, molestia o mareo</button>`;
   }
-  const r = a.recs || {}, items = [['comida', 'Alimentación', r.dieta], ['capsula', 'Complemento recomendado', r.suplemento], ['salud', 'Profesional recomendado', r.profesional]].filter(x => x[2]);
+  const r = a.recs || {}, items = [['comida', 'Alimentación', tieneDieta(a) && r.dieta], ['capsula', 'Complemento recomendado', r.suplemento], ['salud', 'Profesional recomendado', r.profesional]].filter(x => x[2]);
   if (items.length) h += `<div class="recs"><span class="label">Recomendaciones de tu entrenador</span>` + items.map(([i, t, v]) => `<div class="rec">${icon(i)}<div><strong>${t}</strong><p>${esc(v)}</p></div></div>`).join('') + `</div>`;
   if (d?.ejercicios?.length) h += `
     <details class="card" style="margin-top:22px"><summary>Enviar video a mi entrenador</summary>
@@ -583,15 +594,17 @@ function renderAlumno() {
       <button class="btn primary" id="v-send" hidden style="margin:0">Enviar por WhatsApp</button>
       <p class="hint" id="v-help" hidden></p>
     </details>`;
-  h += fichaHtml(a) + relojHtml(a);
+  h += fichaHtml(a) + relojHtml(a) + `<button class="btn" id="mis-datos" style="width:100%;margin-top:12px">📤 Enviar mis datos a mi entrenador</button>`;
   $('v-alumno').innerHTML = h;
   $('start')?.addEventListener('click', () => startPlayer(pasos(d)));
   $('v-alumno').querySelectorAll('[data-hablar]').forEach(b => b.onclick = () => hablar(instruccion(psAlumno[+b.dataset.hablar])));
   $('v-alumno').querySelectorAll('[data-obs]').forEach(b => b.onclick = () => { const o = $('obs-' + b.dataset.obs); o.hidden = !o.hidden });
   $('v-alumno').querySelectorAll('[data-obsal]').forEach(t => t.oninput = () => { d.ejercicios[+t.dataset.obsal].obsAlumno = t.value; save() });
+  if ($('sos')) $('sos').onclick = () => abrirSOS('');
   if ($('campana')) $('campana').onclick = () => { d.nueva = false; save(); renderTop() };
   if (d?.nueva && !campanaSonada) { campanaSonada = true; sonarCampana() }
   bindFicha(a); bindReloj(a);
+  $('mis-datos').onclick = () => abrirWhatsApp(coach().tel, `Hola ${coach().nombre}, soy ${a.nombre}. Aquí van mis medidas, mi reloj y mis observaciones: ${APP_URL}#d=${b64url(JSON.stringify(paqueteDatos(a)))}`);
   let video = null;
   if ($('v-file')) $('v-file').onchange = e => {
     video = e.target.files[0]; if (!video) return;
@@ -685,6 +698,7 @@ function renderCoach() {
         <textarea id="ob${i}" data-k="obs" aria-label="Observaciones del ejercicio ${i + 1}" placeholder="Ej. Si sientes dolor en el hombro, baja el peso a la mitad">${esc(e.obs)}</textarea></details>
     </div>`).join('');
   $('v-coach').innerHTML = `
+    ${(a.reportes || []).some(x => x.fecha === hoyLocal()) ? `<button class="pill sos-pill" id="ver-rep" style="margin-bottom:8px">🆘 ${esc(a.nombre)} reportó ${[...new Set(a.reportes.filter(x => x.fecha === hoyLocal()).map(x => SOS[x.tipo][1].toLowerCase()))].join(' y ')} hoy ↓</button>` : ''}
     ${(a.ficha?.condiciones || a.ficha?.molestias) ? `<button class="pill" id="ver-mol" style="margin-bottom:12px">Tiene molestias: revisar antes de programar ↓</button>` : ''}
     <div class="field"><label class="label" for="titulo">Rutina del ${DIAS[dia]}</label><input id="titulo" value="${esc(d.titulo)}" placeholder="Ej. Pecho y tríceps (vacío = descanso)"></div>
     <p class="hint" style="margin-top:6px">En cada ejercicio elige cómo se mide: por <strong>repeticiones</strong> (el alumno hace sus reps y toca “Terminé la serie”) o por <strong>tiempo</strong> (cuenta regresiva).</p>
@@ -704,14 +718,19 @@ function renderCoach() {
 
     <h3 class="section-title">Recomendaciones para ${esc(a.nombre)}</h3>
     <div class="card">
-      <div class="field"><label class="label" for="r-dieta">Alimentación</label><textarea id="r-dieta" data-r="dieta">${esc(a.recs.dieta)}</textarea></div>
+      <div class="field"><span class="label">Plan de alimentación</span>
+        <div class="seg sm" role="group" aria-label="Plan de alimentación" style="justify-self:start"><button data-dieta="1" aria-pressed="${tieneDieta(a)}">🥗 Con dieta</button><button data-dieta="0" aria-pressed="${!tieneDieta(a)}">Sin dieta</button></div></div>
+      <div class="field" ${tieneDieta(a) ? '' : 'hidden'}><label class="label" for="r-dieta">Alimentación (solo la ve este alumno)</label><textarea id="r-dieta" data-r="dieta">${esc(a.recs.dieta)}</textarea></div>
       <div class="field"><label class="label" for="r-sup">Complemento / suplemento</label><textarea id="r-sup" data-r="suplemento">${esc(a.recs.suplemento)}</textarea></div>
       <div class="field"><label class="label" for="r-pro">Profesional (fisio, quiropráctico, nutricionista)</label><textarea id="r-pro" data-r="profesional">${esc(a.recs.profesional)}</textarea></div>
     </div>
 
     <h3 class="section-title">Enviar al alumno</h3>
     <div class="card">
-      <p class="hint">En el prototipo la rutina viaja como un código que el alumno pega en su celular. En la app real llegará sola a su cuenta.</p>
+      <div class="field"><label class="label" for="a-tel">WhatsApp de ${esc(a.nombre)}</label><input id="a-tel" inputmode="tel" value="${esc(a.tel)}" placeholder="Ej. 573001234567"></div>
+      <button class="btn primary" id="wa-rutina" style="margin:0">📲 Enviar la rutina de hoy por WhatsApp</button>
+      <div id="wa-out" class="hint" hidden></div>
+      <p class="hint" style="margin:0">El alumno toca el enlace y la rutina se abre en su celular con la campana 🔔. Si todavía no la asignaste hoy, se envía la del ${DIAS[dia]}.</p>
       <div class="row"><button class="btn sm" id="share">Copiar código de ${esc(a.nombre)}</button></div>
       <div class="code" id="code" hidden></div>
       <div class="field"><label class="label" for="imp">Pegar un código recibido</label><textarea id="imp" placeholder="Pega aquí el código"></textarea></div>
@@ -773,8 +792,19 @@ function renderCoach() {
   $('c-alarma').onchange = e => { coach().alarma = e.target.value; coach().alarmaAvisada = ''; save(); try { Notification?.requestPermission?.() } catch (x) {} toast(e.target.value ? `Alarma a las ${e.target.value}` : 'Alarma apagada') };
   $('c-alarma-prueba').onclick = () => revisarAlarma(true);
   $('asig-open').onclick = () => abrirAsignar(false);
+  if ($('ver-rep')) $('ver-rep').onclick = () => $('reporte')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
   if ($('ver-mol')) $('ver-mol').onclick = () => { $('mol').open = true; $('mol').scrollIntoView({ behavior: 'smooth', block: 'center' }) };
   $('lib-open').onclick = abrirBiblioteca;
+  v.querySelectorAll('[data-dieta]').forEach(b => b.onclick = () => { a.conDieta = b.dataset.dieta === '1'; save(); renderTop() });
+  $('a-tel').oninput = e => { a.tel = e.target.value; save() };
+  $('wa-rutina').onclick = () => {
+    if (!rutinaDeHoy(a)) {
+      if (!d.ejercicios.length) return toast(`El ${DIAS[dia]} no tiene ejercicios. Arma la rutina primero.`);
+      a.asignada = { fecha: hoyLocal(), de: DIAS[dia], titulo: d.titulo, ejercicios: JSON.parse(JSON.stringify(d.ejercicios)), nueva: true }; save();
+    }
+    const link = APP_URL + '#r=' + b64url(JSON.stringify(paqueteRutina(a)));
+    abrirWhatsApp(a.tel, `Hola ${a.nombre}, aquí está tu rutina de hoy (${rutinaDeHoy(a).titulo || 'Rutina'}) de ${coach().nombre}. Ábrela aquí: ${link}`, $('wa-out'));
+  };
   $('c-nombre').oninput = e => { coach().nombre = e.target.value; save(); $('sel-coach').selectedOptions[0].textContent = coach().nombre };
   const asignar = semana => {
     const ids = [...v.querySelectorAll('.asig:checked')].map(c => c.value);
@@ -822,6 +852,81 @@ function miniatura(file, lado = 240) {
   });
 }
 
+// ---------- Enlaces por WhatsApp: la rutina va al alumno y sus datos vuelven al coach ----------
+const APP_URL = 'https://edzion760.github.io/Fuerza-Real/';
+const b64url = s => btoa(unescape(encodeURIComponent(s))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+const deb64url = s => decodeURIComponent(escape(atob(s.replace(/-/g, '+').replace(/_/g, '/'))));
+function paqueteRutina(a) {
+  const x = JSON.parse(JSON.stringify(a)), sinFotos = l => (l || []).forEach(e => delete e.foto);
+  Object.values(x.semana || {}).forEach(d => sinFotos(d.ejercicios)); sinFotos(x.asignada?.ejercicios);
+  return { coach: coach().nombre, coachTel: coach().tel, alumno: x };
+}
+function paqueteDatos(a) {
+  return { coach: coach().nombre, alumno: { id: a.id, nombre: a.nombre, ficha: a.ficha, medidas: a.medidas, reloj: a.reloj, pulso: a.pulso, reportes: a.reportes,
+    obs: (rutinaDeHoy(a)?.ejercicios || []).map(e => e.obsAlumno || '') } };
+}
+function abrirWhatsApp(tel, texto, salida) {
+  const url = `https://wa.me/${(tel || '').replace(/\D/g, '')}?text=${encodeURIComponent(texto)}`;
+  if (salida) { salida.hidden = false; salida.innerHTML = `Si WhatsApp no se abrió solo, <a href="${url}" target="_blank" rel="noopener">toca aquí para enviarlo</a>.` }
+  try { window.open(url, '_blank', 'noopener') } catch (e) {}
+}
+// Al abrir un enlace recibido: #r= trae la rutina al celular del alumno; #d= trae los datos del alumno al celular del coach.
+function recibirEnlace() {
+  const h = location.hash, tipo = h.slice(1, 3);
+  if (tipo !== 'r=' && tipo !== 'd=') return;
+  try {
+    const pk = JSON.parse(deb64url(h.slice(3)));
+    let c = db.coaches.find(x => x.nombre === pk.coach);
+    if (!c) { c = { id: 'c' + Date.now(), nombre: pk.coach, tel: '', alumnos: [], intervalos: intervalosEjemplo() }; db.coaches.push(c) }
+    const i = c.alumnos.findIndex(x => x.id === pk.alumno.id), prev = c.alumnos[i];
+    if (tipo === 'r=') {
+      if (pk.coachTel) c.tel = pk.coachTel;
+      const al = pk.alumno;
+      if (prev) ['ficha', 'medidas', 'reloj', 'pulso', 'reportes'].forEach(k => { if (prev[k]) al[k] = prev[k] });
+      if (al.asignada) al.asignada.nueva = true;
+      i >= 0 ? c.alumnos[i] = al : c.alumnos.push(al);
+      modo = 'alumno'; dia = hoy;
+      setTimeout(() => toast('🔔 Te llegó la rutina de hoy'), 400);
+    } else {
+      if (!prev) throw new Error('alumno desconocido');
+      ['ficha', 'medidas', 'reloj', 'pulso', 'reportes'].forEach(k => { if (pk.alumno[k]) prev[k] = pk.alumno[k] });
+      const hoyR = rutinaDeHoy(prev); if (hoyR) pk.alumno.obs.forEach((o, j) => { if (o && hoyR.ejercicios[j]) hoyR.ejercicios[j].obsAlumno = o });
+      modo = 'coach';
+      setTimeout(() => toast(`Datos de ${prev.nombre} actualizados`), 400);
+    }
+    db.coachId = c.id; alumnoId = pk.alumno.id; save();
+  } catch (e) { setTimeout(() => toast('El enlace está incompleto. Pide que te lo envíen de nuevo.'), 400) }
+  history.replaceState(null, '', location.pathname + location.search);
+}
+
+// ---------- Reporte de dolor, molestia o mareo ----------
+const SOS = { dolor: ['🤕', 'Dolor', 'Detén el ejercicio que te causa dolor. No sigas forzando esa zona.'],
+  molestia: ['😣', 'Molestia', 'Baja el peso o la intensidad. Si la molestia aumenta, detente.'],
+  mareo: ['😵', 'Mareo', 'Detente ya. Siéntate o acuéstate, respira despacio y toma agua. Si el mareo no pasa, o sientes dolor en el pecho o falta de aire, pide ayuda médica de inmediato.'],
+  otro: ['❓', 'Otro', 'Cuéntale a tu entrenador qué sientes.'] };
+function abrirSOS(ejercicio) {
+  const a = alumno(); let tipo = '';
+  $('sosv').innerHTML = `
+    <div class="lib-head"><h2 class="section-title" style="margin:0">🆘 ¿Qué sientes?</h2><button class="btn sm ghost" id="sos-x">Cerrar</button></div>
+    <div class="sos-opts">${Object.entries(SOS).map(([k, [e, t]]) => `<button class="sos-op" data-sos="${k}" aria-pressed="false"><span>${e}</span>${t}</button>`).join('')}</div>
+    <div class="lib-list"><p class="sos-tip" id="sos-tip" hidden></p>
+      <div class="field"><label class="label" for="sos-nota">¿Dónde o qué sientes?${ejercicio ? ` (en ${esc(ejercicio)})` : ''}</label><textarea id="sos-nota" placeholder="Ej. dolor en la rodilla derecha al bajar"></textarea></div></div>
+    <div class="lib-foot"><button class="btn primary" id="sos-ok" style="margin:0" disabled>Guardar y avisar a mi entrenador</button></div>`;
+  $('sosv').hidden = false; document.body.style.overflow = 'hidden';
+  const cerrar = () => { $('sosv').hidden = true; if ($('player').hidden) document.body.style.overflow = '' };
+  $('sos-x').onclick = cerrar;
+  $('sosv').querySelectorAll('[data-sos]').forEach(b => b.onclick = () => {
+    tipo = b.dataset.sos; $('sosv').querySelectorAll('[data-sos]').forEach(x => x.setAttribute('aria-pressed', x === b));
+    $('sos-tip').hidden = false; $('sos-tip').textContent = SOS[tipo][2]; $('sos-ok').disabled = false;
+    if (tipo === 'mareo') hablar('Detente. Siéntate, respira despacio y toma agua.');
+  });
+  $('sos-ok').onclick = () => {
+    const r = { fecha: hoyLocal(), hora: new Date().toTimeString().slice(0, 5), tipo, nota: $('sos-nota').value.trim(), ejercicio };
+    (a.reportes ||= []).push(r); save(); cerrar(); renderTop(); toast('Reporte guardado');
+    abrirWhatsApp(coach().tel, `${SOS[tipo][0]} ${a.nombre} reporta ${SOS[tipo][1].toLowerCase()}${ejercicio ? ` en ${ejercicio}` : ''} (${r.hora}). ${r.nota}`);
+  };
+}
+
 // ---------- Asignar la rutina de hoy, alarma del coach y reloj del alumno ----------
 function abrirAsignar(porAlarma) {
   const a = alumno(), lista = coach().alumnos, dias = DIAS.map((n, i) => [i, a.semana?.[i]]).filter(([, r]) => r?.ejercicios?.length);
@@ -866,13 +971,14 @@ setInterval(() => {
 
 // Lo que el alumno reporta y el coach ve: medidas, reloj y observaciones del día.
 function reporteAlumno(a) {
-  const f = a.ficha || {}, u = (a.medidas || []).slice(-1)[0], r = a.reloj, bt = a.pulso, obs = (rutinaDeHoy(a)?.ejercicios || []).filter(e => e.obsAlumno);
-  if (!u && !f.talla && !f.estatura && !r && !bt && !obs.length) return '';
-  return `<div class="card" style="margin-bottom:14px"><span class="label">Lo que reporta ${esc(a.nombre)}</span>
+  const f = a.ficha || {}, u = (a.medidas || []).slice(-1)[0], r = a.reloj, bt = a.pulso, obs = (rutinaDeHoy(a)?.ejercicios || []).filter(e => e.obsAlumno), rep = (a.reportes || []).slice(-5).reverse();
+  if (!u && !f.talla && !f.estatura && !r && !bt && !obs.length && !rep.length) return '';
+  return `<div class="card" id="reporte" style="margin-bottom:14px"><span class="label">Lo que reporta ${esc(a.nombre)}</span>
     ${f.talla || f.estatura ? `<p style="margin:0">Talla <strong>${esc(f.talla || '—')}</strong> · Estatura <strong>${f.estatura ?? '—'} cm</strong></p>` : ''}
     ${u ? `<p style="margin:0">Medidas del ${u.fecha}: ${MEDIDAS.map(([k, , c]) => `${c} <strong>${u[k] ?? '—'}</strong>`).join(' · ')}</p>` : ''}
     ${r ? `<p style="margin:0">Reloj (${r.fecha}): ${r.pasos ?? '—'} pasos · ${r.kcal ?? '—'} kcal · FC reposo ${r.fc ?? '—'} · sueño ${r.sueno ?? '—'} h</p>` : ''}
     ${bt ? `<p style="margin:0">Banda de pulso: <strong>${bt.fc} ppm</strong> (${esc(bt.nombre)}, ${bt.hora})</p>` : ''}
+    ${rep.length ? `<p style="margin:0"><strong>Reportes:</strong></p>${rep.map(x => `<p style="margin:0">${SOS[x.tipo][0]} ${x.fecha} ${x.hora} · ${SOS[x.tipo][1]}${x.ejercicio ? ` en ${esc(x.ejercicio)}` : ''}${x.nota ? `: ${esc(x.nota)}` : ''}</p>`).join('')}` : ''}
     ${obs.length ? `<p style="margin:0"><strong>Observaciones de hoy:</strong></p>${obs.map(e => `<p style="margin:0">📝 ${esc(e.nombre)}: ${esc(e.obsAlumno)}</p>`).join('')}` : ''}
   </div>`;
 }
@@ -1049,6 +1155,7 @@ function tick() {
   const left = Math.max(0, Math.ceil((P.end - Date.now()) / 1000));
   if (left !== P.left) { P.left = left;
     if (left <= 3 && left > 0 && P.lastBeep !== left) { P.lastBeep = left; beep(880, 90) }
+    else if (left > 3 && db.bipSeg !== false) beep(620, 35, .08);
     if (left === 0) { beep(1320, 260); navigator.vibrate?.(300); return go(P.i + 1) }
     drawPlayer(true);
   }
@@ -1070,6 +1177,7 @@ function drawPlayer(soloTiempo) {
     <div class="p-top"><button class="btn sm ghost" id="p-x">Salir</button>
       <div class="p-progress" role="progressbar" aria-valuenow="${hechos}" aria-valuemax="${total}"><div style="width:${total ? hechos / total * 100 : 0}%"></div></div>
       <span class="num" style="color:var(--muted)">${hechos}/${total}</span>
+      <button class="btn sm ghost" id="p-bip" aria-pressed="${db.bipSeg !== false}">${db.bipSeg !== false ? 'Bip sí' : 'Bip no'}</button>
       <button class="btn sm ghost" id="p-voz" aria-pressed="${P.voz}">${P.voz ? 'Voz sí' : 'Voz no'}</button></div>
     <div class="p-main">
       <div class="p-phase">${p.fase || FASE[p.tipo]}${p.serie ? ` · ${P.int ? '' : 'Serie '}${p.serie}/${p.series}` : ''}</div>
@@ -1078,6 +1186,7 @@ function drawPlayer(soloTiempo) {
         <div class="count">${centro}</div></div>
       <h2 class="p-name">${esc(p.nombre)}</h2>
       ${p.tipo === 'work' && !p.sinMaq ? `<div class="p-media">${GRUPOS[p.grupo] ? `<span class="emo-box" title="${esc(GRUPOS[p.grupo].t)}">${GRUPOS[p.grupo].e}</span>` : ''}${maq(p, 'lg')}<button class="audio-btn" id="p-audio" aria-label="Escuchar cómo se hace">🔊<small>Escuchar</small></button></div>` : ''}
+      ${p.tipo !== 'done' && !P.int ? `<button class="btn sm sos" id="p-sos">🆘 Me siento mal</button>` : ''}
       <p class="p-msg">${esc(p.msg || '')}${p.obs ? `<br><span class="p-obs">📝 ${esc(p.obs)}</span>` : ''}</p>
     </div>
     ${p.tipo !== 'done' ? `<div class="p-next t-${sig.tipo}">${sig.tipo === 'work' && !sig.sinMaq ? maq(sig) : icon(sig.icono)}<span>Después: <strong style="color:var(--fg)">${esc(sig.nombre)}</strong>${sig.seg ? ' · ' + fmt(sig.seg) : ''}</span></div>` : '<div></div>'}
@@ -1089,8 +1198,10 @@ function drawPlayer(soloTiempo) {
       <button class="btn" id="p-next">${p.seg ? '+10 s' : 'Saltar'}</button>
     </div>`;
   $('p-x').onclick = stopPlayer;
+  if ($('p-sos')) $('p-sos').onclick = () => { if (p.seg && !P.pausado) { P.pausado = true; drawPlayer() } abrirSOS(p.tipo === 'work' ? p.nombre : '') };
   if ($('p-audio')) $('p-audio').onclick = () => hablar(instruccion(p));
   $('p-voz').onclick = () => { P.voz = !P.voz; drawPlayer() };
+  $('p-bip').onclick = () => { db.bipSeg = db.bipSeg === false; save(); drawPlayer() };
   $('p-prev').onclick = () => go(P.i - 1);
   $('p-next').onclick = () => { if (!p.seg) return go(P.i + 1); if (P.pausado) { P.left += 10; drawPlayer(true) } else { P.end += 10000; tick() } };
   if ($('p-pause')) $('p-pause').onclick = () => { if (P.pausado) { P.end = Date.now() + P.left * 1000; P.pausado = false } else P.pausado = true; drawPlayer() };
@@ -1111,6 +1222,8 @@ $('btn-coach-nuevo').onclick = () => {
 $('sel-alumno').onchange = e => { alumnoId = e.target.value; renderTop() };
 $('days').onclick = e => { const b = e.target.closest('[data-d]'); if (b) { dia = +b.dataset.d; renderTop() } };
 $('btn-nuevo').onclick = () => { const a = { id: 'a' + Date.now(), nombre: `Alumno ${coach().alumnos.length + 1}`, objetivo: '', recs: {}, semana: {} }; coach().alumnos.push(a); alumnoId = a.id; save(); renderTop(); toast('Alumno creado'); $('a-nombre')?.select() };
+recibirEnlace();
+window.addEventListener('hashchange', () => { recibirEnlace(); renderTop() });
 renderTop();
 </script>
 </body>

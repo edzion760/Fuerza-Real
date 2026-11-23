@@ -22,6 +22,13 @@ navegador del celular; los datos se guardan en ese navegador.
 Lema: *El cuerpo es una máquina completa, ningún músculo trabaja aislado.*
 
 **Entrenador**
+- Envía la rutina del día por WhatsApp con un enlace: el alumno lo toca y la
+  rutina se abre en su celular con la campana. El alumno devuelve sus datos
+  (medidas, reloj, observaciones y reportes) con otro enlace.
+- Filtro de dieta: la alimentación solo le aparece a los alumnos “con dieta”.
+- Botón para que el alumno reporte dolor, molestia o mareo, con indicaciones
+  de seguridad y aviso al coach.
+- Bip en cada segundo de la cuenta regresiva (se puede apagar).
 - Asigna la rutina del día a uno o varios alumnos; al alumno le suena una
   campana y la rutina se borra sola a las 12 de la noche.
 - Alarma diaria para recordar asignar las rutinas (suena con la app abierta).
