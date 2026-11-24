@@ -571,6 +571,10 @@ function renderAlumno() {
   if (!d?.ejercicios?.length) h = a.asignada && a.asignada.fecha < hoyLocal()
     ? `<div class="empty"><strong>La rutina anterior se borró a las 12 de la noche</strong><br>Cuando tu entrenador te asigne la de hoy, sonará una campana 🔔.</div>`
     : `<div class="empty"><strong>Todavía no tienes rutina para hoy</strong><br>Cuando tu entrenador te la asigne, sonará una campana 🔔. Mientras tanto, hidrátate y descansa.</div>`;
+  if (!d?.ejercicios?.length) h += `<div class="card" style="margin-top:12px"><span class="label">¿Te llegó la rutina por WhatsApp y no aparece?</span>
+    <p class="hint" style="margin:0">Mantén presionado el mensaje en WhatsApp, cópialo y pégalo aquí.</p>
+    <div class="field"><textarea id="pegar-rutina" aria-label="Mensaje de WhatsApp con la rutina" placeholder="Pega aquí el mensaje completo"></textarea></div>
+    <button class="btn" id="pegar-ok">Abrir mi rutina</button></div>`;
   else {
     const ps = psAlumno = pasos(d);
     h = (d.nueva ? `<button class="campana" id="campana"><span class="bell">🔔</span><span><strong>¡Te llegó la rutina de hoy!</strong><small>${esc(d.titulo || 'Rutina')} · de ${esc(coach().nombre)}. Toca para verla.</small></span></button>` : '') + `<div class="day-head"><div><span class="label">Hoy · ${d.ejercicios.length} ejercicios · se borra a las 12 de la noche</span><h2>${esc(d.titulo || 'Rutina del día')}</h2></div>
@@ -600,11 +604,12 @@ function renderAlumno() {
   $('v-alumno').querySelectorAll('[data-hablar]').forEach(b => b.onclick = () => hablar(instruccion(psAlumno[+b.dataset.hablar])));
   $('v-alumno').querySelectorAll('[data-obs]').forEach(b => b.onclick = () => { const o = $('obs-' + b.dataset.obs); o.hidden = !o.hidden });
   $('v-alumno').querySelectorAll('[data-obsal]').forEach(t => t.oninput = () => { d.ejercicios[+t.dataset.obsal].obsAlumno = t.value; save() });
+  if ($('pegar-ok')) $('pegar-ok').onclick = () => importarTexto($('pegar-rutina').value);
   if ($('sos')) $('sos').onclick = () => abrirSOS('');
   if ($('campana')) $('campana').onclick = () => { d.nueva = false; save(); renderTop() };
   if (d?.nueva && !campanaSonada) { campanaSonada = true; sonarCampana() }
   bindFicha(a); bindReloj(a);
-  $('mis-datos').onclick = () => abrirWhatsApp(coach().tel, `Hola ${coach().nombre}, soy ${a.nombre}. Aquí van mis medidas, mi reloj y mis observaciones: ${APP_URL}#d=${b64url(JSON.stringify(paqueteDatos(a)))}`);
+  $('mis-datos').onclick = async () => abrirWhatsApp(coach().tel, `📤 ${coach().nombre}, soy ${a.nombre}. Aquí van mis medidas, mi reloj y mis observaciones:\n\n${APP_URL}#d=${await comprimir(JSON.stringify(paqueteDatos(a)))}`);
   let video = null;
   if ($('v-file')) $('v-file').onchange = e => {
     video = e.target.files[0]; if (!video) return;
@@ -731,10 +736,8 @@ function renderCoach() {
       <button class="btn primary" id="wa-rutina" style="margin:0">📲 Enviar la rutina de hoy por WhatsApp</button>
       <div id="wa-out" class="hint" hidden></div>
       <p class="hint" style="margin:0">El alumno toca el enlace y la rutina se abre en su celular con la campana 🔔. Si todavía no la asignaste hoy, se envía la del ${DIAS[dia]}.</p>
-      <div class="row"><button class="btn sm" id="share">Copiar código de ${esc(a.nombre)}</button></div>
-      <div class="code" id="code" hidden></div>
-      <div class="field"><label class="label" for="imp">Pegar un código recibido</label><textarea id="imp" placeholder="Pega aquí el código"></textarea></div>
-      <div class="row"><button class="btn sm" id="do-imp">Importar rutina</button><button class="btn sm ghost" id="reset">Restaurar ejemplo</button></div>
+      <div class="field"><label class="label" for="imp">¿Un alumno te mandó sus datos y el enlace no abrió? Pega aquí su mensaje</label><textarea id="imp" placeholder="Pega aquí el mensaje de WhatsApp completo"></textarea></div>
+      <div class="row"><button class="btn sm" id="do-imp">Abrir mensaje</button><button class="btn sm ghost" id="reset">Restaurar ejemplo</button></div>
     </div>
 
     <h3 class="section-title">Alumno y entrenador</h3>
@@ -797,13 +800,13 @@ function renderCoach() {
   $('lib-open').onclick = abrirBiblioteca;
   v.querySelectorAll('[data-dieta]').forEach(b => b.onclick = () => { a.conDieta = b.dataset.dieta === '1'; save(); renderTop() });
   $('a-tel').oninput = e => { a.tel = e.target.value; save() };
-  $('wa-rutina').onclick = () => {
+  $('wa-rutina').onclick = async () => {
     if (!rutinaDeHoy(a)) {
       if (!d.ejercicios.length) return toast(`El ${DIAS[dia]} no tiene ejercicios. Arma la rutina primero.`);
       a.asignada = { fecha: hoyLocal(), de: DIAS[dia], titulo: d.titulo, ejercicios: JSON.parse(JSON.stringify(d.ejercicios)), nueva: true }; save();
     }
-    const link = APP_URL + '#r=' + b64url(JSON.stringify(paqueteRutina(a)));
-    abrirWhatsApp(a.tel, `Hola ${a.nombre}, aquí está tu rutina de hoy (${rutinaDeHoy(a).titulo || 'Rutina'}) de ${coach().nombre}. Ábrela aquí: ${link}`, $('wa-out'));
+    const link = APP_URL + '#r=' + await comprimir(JSON.stringify(paqueteRutina(a)));
+    abrirWhatsApp(a.tel, `🏋️ ${a.nombre}, tu rutina de hoy (${rutinaDeHoy(a).titulo || 'Rutina'}) de ${coach().nombre}:\n\n${link}\n\nToca el enlace para abrirla en FR Fuerza Real.`, $('wa-out'));
   };
   $('c-nombre').oninput = e => { coach().nombre = e.target.value; save(); $('sel-coach').selectedOptions[0].textContent = coach().nombre };
   const asignar = semana => {
@@ -822,19 +825,7 @@ function renderCoach() {
     save(); toast(`Rutina asignada a ${ids.length} alumno${ids.length > 1 ? 's' : ''}`);
   };
   if ($('asig-dia')) { $('asig-dia').onclick = () => asignar(false); $('asig-sem').onclick = () => asignar(true) }
-  $('share').onclick = () => {
-    const code = 'PULSO1.' + btoa(unescape(encodeURIComponent(JSON.stringify(a))));
-    const box = $('code'); box.textContent = code; box.hidden = false;
-    navigator.clipboard?.writeText(code).then(() => toast('Código copiado. Pégalo en WhatsApp.'), () => toast('Selecciona el código y cópialo'));
-  };
-  $('do-imp').onclick = () => {
-    try {
-      const raw = $('imp').value.trim().replace(/^PULSO1\./, '');
-      const nuevo = JSON.parse(decodeURIComponent(escape(atob(raw))));
-      if (!nuevo.semana) throw 0;
-      nuevo.id = 'a' + Date.now(); coach().alumnos.push(nuevo); alumnoId = nuevo.id; save(); toast('Rutina importada'); renderTop();
-    } catch (e) { toast('Ese código no es válido. Cópialo completo.') }
-  };
+  $('do-imp').onclick = () => importarTexto($('imp').value);
   $('reset').onclick = () => { db = ejemplo(); asignarEjemplo(); alumnoId = coach().alumnos[0].id; save(); toast('Ejemplo restaurado'); renderTop() };
 }
 
@@ -856,11 +847,26 @@ function miniatura(file, lado = 240) {
 const APP_URL = 'https://edzion760.github.io/Fuerza-Real/';
 const b64url = s => btoa(unescape(encodeURIComponent(s))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 const deb64url = s => decodeURIComponent(escape(atob(s.replace(/-/g, '+').replace(/_/g, '/'))));
+// El enlace lleva solo la rutina de hoy (sin fotos ni la semana completa) y va comprimido, para que WhatsApp lo muestre como enlace.
 function paqueteRutina(a) {
-  const x = JSON.parse(JSON.stringify(a)), sinFotos = l => (l || []).forEach(e => delete e.foto);
-  Object.values(x.semana || {}).forEach(d => sinFotos(d.ejercicios)); sinFotos(x.asignada?.ejercicios);
-  return { coach: coach().nombre, coachTel: coach().tel, alumno: x };
+  const r = JSON.parse(JSON.stringify(rutinaDeHoy(a)));
+  r.ejercicios.forEach(e => { delete e.foto; delete e.obsAlumno });
+  return { coach: coach().nombre, coachTel: coach().tel, alumno: { id: a.id, nombre: a.nombre, objetivo: a.objetivo, conDieta: tieneDieta(a),
+    recs: { ...a.recs, dieta: tieneDieta(a) ? a.recs?.dieta : '' }, enfoque: a.enfoque, asignada: r } };
 }
+async function comprimir(txt) {
+  if (!window.CompressionStream) return 'j' + b64url(txt);
+  const buf = await new Response(new Blob([txt]).stream().pipeThrough(new CompressionStream('deflate-raw'))).arrayBuffer();
+  let bin = ''; new Uint8Array(buf).forEach(b => bin += String.fromCharCode(b));
+  return 'z' + btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+async function descomprimir(s) {
+  if (s[0] === 'j') return deb64url(s.slice(1));
+  if (s[0] !== 'z') return deb64url(s);  // enlaces de la versión anterior
+  const bin = atob(s.slice(1).replace(/-/g, '+').replace(/_/g, '/'));
+  return new Response(new Blob([Uint8Array.from(bin, c => c.charCodeAt(0))]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).text();
+}
+const buscarEnlace = texto => texto.match(/#([rd])=([A-Za-z0-9_-]{20,})/);
 function paqueteDatos(a) {
   return { coach: coach().nombre, alumno: { id: a.id, nombre: a.nombre, ficha: a.ficha, medidas: a.medidas, reloj: a.reloj, pulso: a.pulso, reportes: a.reportes,
     obs: (rutinaDeHoy(a)?.ejercicios || []).map(e => e.obsAlumno || '') } };
@@ -868,25 +874,25 @@ function paqueteDatos(a) {
 function abrirWhatsApp(tel, texto, salida) {
   const url = `https://wa.me/${(tel || '').replace(/\D/g, '')}?text=${encodeURIComponent(texto)}`;
   if (salida) { salida.hidden = false; salida.innerHTML = `Si WhatsApp no se abrió solo, <a href="${url}" target="_blank" rel="noopener">toca aquí para enviarlo</a>.` }
-  try { window.open(url, '_blank', 'noopener') } catch (e) {}
+  let w = null; try { w = window.open(url, '_blank') } catch (e) {}
+  if (!w) location.href = url;
 }
 // Al abrir un enlace recibido: #r= trae la rutina al celular del alumno; #d= trae los datos del alumno al celular del coach.
-function recibirEnlace() {
-  const h = location.hash, tipo = h.slice(1, 3);
-  if (tipo !== 'r=' && tipo !== 'd=') return;
+async function procesarPaquete(tipo, raw) {
   try {
-    const pk = JSON.parse(deb64url(h.slice(3)));
+    const pk = JSON.parse(await descomprimir(raw));
     let c = db.coaches.find(x => x.nombre === pk.coach);
     if (!c) { c = { id: 'c' + Date.now(), nombre: pk.coach, tel: '', alumnos: [], intervalos: intervalosEjemplo() }; db.coaches.push(c) }
     const i = c.alumnos.findIndex(x => x.id === pk.alumno.id), prev = c.alumnos[i];
-    if (tipo === 'r=') {
+    if (tipo === 'r') {
       if (pk.coachTel) c.tel = pk.coachTel;
-      const al = pk.alumno;
+      const al = { semana: {}, ...prev, ...pk.alumno };
       if (prev) ['ficha', 'medidas', 'reloj', 'pulso', 'reportes'].forEach(k => { if (prev[k]) al[k] = prev[k] });
       if (al.asignada) al.asignada.nueva = true;
       i >= 0 ? c.alumnos[i] = al : c.alumnos.push(al);
       modo = 'alumno'; dia = hoy;
-      setTimeout(() => toast('🔔 Te llegó la rutina de hoy'), 400);
+      const f = al.asignada?.fecha;
+      setTimeout(() => toast(f && f < hoyLocal() ? `Esta rutina era del ${f} y ya se borró a las 12 de la noche. Pídele a ${pk.coach} la de hoy.` : '🔔 Te llegó la rutina de hoy'), 400);
     } else {
       if (!prev) throw new Error('alumno desconocido');
       ['ficha', 'medidas', 'reloj', 'pulso', 'reportes'].forEach(k => { if (pk.alumno[k]) prev[k] = pk.alumno[k] });
@@ -894,9 +900,25 @@ function recibirEnlace() {
       modo = 'coach';
       setTimeout(() => toast(`Datos de ${prev.nombre} actualizados`), 400);
     }
-    db.coachId = c.id; alumnoId = pk.alumno.id; save();
-  } catch (e) { setTimeout(() => toast('El enlace está incompleto. Pide que te lo envíen de nuevo.'), 400) }
+    db.coachId = c.id; alumnoId = pk.alumno.id; save(); renderTop();
+    return true;
+  } catch (e) { toast('No se pudo abrir: el enlace llegó incompleto. Pide que te lo envíen de nuevo.'); return false }
+}
+function recibirEnlace() {
+  const m = buscarEnlace(location.hash);
+  if (!m) return;
   history.replaceState(null, '', location.pathname + location.search);
+  procesarPaquete(m[1], m[2]);
+}
+// Mensaje de WhatsApp pegado a mano (o código viejo PULSO1).
+function importarTexto(texto) {
+  const m = buscarEnlace(texto);
+  if (m) return procesarPaquete(m[1], m[2]);
+  try {
+    const nuevo = JSON.parse(decodeURIComponent(escape(atob(texto.trim().replace(/^PULSO1\./, '')))));
+    if (!nuevo.semana) throw 0;
+    nuevo.id = 'a' + Date.now(); coach().alumnos.push(nuevo); alumnoId = nuevo.id; save(); toast('Rutina importada'); renderTop();
+  } catch (e) { toast('Ese mensaje no trae el enlace completo. Cópialo entero desde WhatsApp.') }
 }
 
 // ---------- Reporte de dolor, molestia o mareo ----------
@@ -1222,9 +1244,9 @@ $('btn-coach-nuevo').onclick = () => {
 $('sel-alumno').onchange = e => { alumnoId = e.target.value; renderTop() };
 $('days').onclick = e => { const b = e.target.closest('[data-d]'); if (b) { dia = +b.dataset.d; renderTop() } };
 $('btn-nuevo').onclick = () => { const a = { id: 'a' + Date.now(), nombre: `Alumno ${coach().alumnos.length + 1}`, objetivo: '', recs: {}, semana: {} }; coach().alumnos.push(a); alumnoId = a.id; save(); renderTop(); toast('Alumno creado'); $('a-nombre')?.select() };
-recibirEnlace();
-window.addEventListener('hashchange', () => { recibirEnlace(); renderTop() });
 renderTop();
+recibirEnlace();
+window.addEventListener('hashchange', recibirEnlace);
 </script>
 </body>
 </html>
