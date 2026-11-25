@@ -62,3 +62,9 @@ La propuesta completa del equipo (desarrollo, administración, marketing y
 puntos legales) está en `PROPUESTA.md`.
 
 © 2026 Todos los derechos reservados.
+
+## Servidor (cuentas y envío automático)
+
+La carpeta `server/` tiene el servidor para que la app funcione con cuentas de
+entrenador y alumno. Está listo y probado, pero la app aún no lo usa. Ver
+`server/README.md`.

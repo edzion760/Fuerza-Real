@@ -1,0 +1,53 @@
+// schema.prisma — Fuerza Real API
+//
+// Dos tipos de cuenta: el ENTRENADOR arma las rutinas y el ALUMNO las recibe.
+// Las rutinas, la ficha y los reportes se guardan como JSON con la misma forma
+// que usa la app (index.html), para no traducir entre dos modelos de datos.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum Rol {
+  ENTRENADOR
+  ALUMNO
+}
+
+model Usuario {
+  id              String        @id @default(cuid())
+  rol             Rol
+  nombre          String
+  celular         String        @unique
+  claveHash       String?       // null mientras el alumno no activa su invitación
+  sesionVersion   Int           @default(0)
+  creadoEn        DateTime      @default(now())
+
+  entrenadorId    String?
+  entrenador      Usuario?      @relation("Alumnos", fields: [entrenadorId], references: [id], onDelete: Cascade)
+  alumnos         Usuario[]     @relation("Alumnos")
+
+  datos           Json?         // entrenador: tiempos, intervalos, alarma, WhatsApp
+  plan            Json?         // alumno: semana, recomendaciones, enfoque, verSemana (lo escribe el entrenador)
+  asignada        Json?         // alumno: rutina de hoy con su fecha (lo escribe el entrenador)
+  reporte         Json?         // alumno: ficha, medidas, reloj, observaciones y reportes (lo escribe el alumno)
+
+  invitacionHash  String?       @unique
+  invitacionVence DateTime?
+
+  suscripciones   Suscripcion[]
+}
+
+model Suscripcion {
+  id        String   @id @default(cuid())
+  usuarioId String
+  usuario   Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  creadoEn  DateTime @default(now())
+}
