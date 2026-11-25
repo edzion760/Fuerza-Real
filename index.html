@@ -221,6 +221,13 @@ details.card[open] > summary::after { content: "–" }
 .sos-op span { font-size: 2rem }
 .sos-op[aria-pressed="true"] { background: var(--red); color: #fff }
 .sos-tip { margin: 0 0 10px; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--red); color: var(--red-hi); font-weight: 600 }
+.ring-maq { position: absolute; inset: 22%; display: grid; place-items: center; opacity: .16; color: var(--gold-hi); pointer-events: none }
+.ring .ring-maq svg, .ring .ring-maq img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; transform: none }
+.ring .count { z-index: 1 }
+.p-acc { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center }
+.p-acc .btn.sm.sos { margin: 6px 0 0 }
+.video-btn { margin-top: 6px; cursor: pointer }
+.tiempos summary { font-size: 1.05rem !important }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important } }
 </style>
 </head>
@@ -360,7 +367,7 @@ const BIBLIOTECA = [
     ['Vuelo posterior en polea a una mano'], ['Pec fly inversa'], ['Vuelos laterales en máquina'],
     ['Encogimiento de hombros', ['Barra posterior', 'Barra al frente', 'Barra anterior', 'Mancuerna']]] },
   { g: 'anterior', t: 'Pierna · cadena anterior', e: '🦵', items: [
-    ['Sentadilla', ['En Hack', 'De riel 45°', 'Barra libre', 'Goblet con mancuerna']],
+    ['Sentadilla', ['Hack de 45°', 'Hack de péndulo', 'Barra libre', 'Goblet con mancuerna']],
     ['Zancada'],
     ['Extensión de cuádriceps en máquina', ['Unipodal', 'Bipodal']],
     ['Sentadilla en máquina Smith'], ['Sentadilla pistol (squat pistol)'],
@@ -442,7 +449,7 @@ const intervalosEjemplo = () => [
 // Cada entrenador tiene su perfil con sus alumnos y sus temporizadores de intervalos.
 function asignarEjemplo() {
   const a = db.coaches[0].alumnos[0], d = (new Date().getDay() + 6) % 7, r = a.semana[d]?.ejercicios?.length ? a.semana[d] : a.semana[0];
-  a.asignada = { fecha: hoyLocal(), de: DIAS[d], titulo: r.titulo, ejercicios: JSON.parse(JSON.stringify(r.ejercicios)), nueva: true };
+  a.asignada = { fecha: hoyLocal(), de: DIAS[d], titulo: r.titulo, prep: 10, ejercicios: JSON.parse(JSON.stringify(r.ejercicios)), nueva: true };
 }
 function ejemplo() {
   return { coachId: 'c1', coaches: [
@@ -456,6 +463,10 @@ function ejemplo() {
 // La rutina que el coach asigna vale solo el día en que la asigna: a las 12 de la noche desaparece.
 // La dieta solo le aparece al alumno marcado “con dieta”.
 const tieneDieta = a => a.conDieta ?? !!a.recs?.dieta;
+// Tiempos de descanso que Fabián define; se usan para ejercicios nuevos y se pueden aplicar a todo el día.
+const tiemposCoach = () => ({ oxigenar: 60, cambio: 90, prep: 10, ...coach().tiempos });
+// Copia de la rutina de un día que se le asigna al alumno hoy (siempre la versión actual del día).
+const asignacion = (r, i) => ({ fecha: hoyLocal(), de: DIAS[i], titulo: r.titulo, prep: tiemposCoach().prep, ejercicios: JSON.parse(JSON.stringify(r.ejercicios)), nueva: true });
 const rutinaDeHoy = a => a.asignada?.fecha === hoyLocal() ? a.asignada : null;
 let db; try { db = JSON.parse(localStorage.getItem(KEY)) } catch (e) {}
 // Datos guardados antes de los perfiles: todo pasa a ser el perfil de Fabián.
@@ -479,7 +490,7 @@ function toast(msg) { const t = $('toast'); t.textContent = msg; t.hidden = fals
 
 // Convierte la rutina del día en la secuencia que corre el temporizador.
 function pasos(d) {
-  const out = [{ tipo: 'switch', nombre: 'Prepárate', seg: 10, icono: 'cambio', msg: d.ejercicios[0] ? `Primero: ${d.ejercicios[0].nombre}` : '' }];
+  const out = [{ tipo: 'switch', nombre: 'Prepárate', seg: +d.prep || 10, icono: 'cambio', msg: d.ejercicios[0] ? `Primero: ${d.ejercicios[0].nombre}` : '' }];
   d.ejercicios.forEach((e, i) => {
     const series = Math.max(1, +e.series || 1);
     for (let s = 1; s <= series; s++) {
@@ -504,7 +515,7 @@ function renderTop() {
   $('btn-nuevo').hidden = $('btn-coach-nuevo').hidden = modo !== 'coach';
   $('m-alumno').setAttribute('aria-pressed', modo === 'alumno'); $('m-coach').setAttribute('aria-pressed', modo === 'coach'); $('m-int').setAttribute('aria-pressed', modo === 'int');
   $('v-alumno').hidden = modo !== 'alumno'; $('v-coach').hidden = modo !== 'coach'; $('v-int').hidden = modo !== 'int';
-  $('f-alumno').hidden = modo === 'int'; $('days').hidden = modo !== 'coach';
+  $('f-alumno').hidden = modo === 'int'; $('days').hidden = !(modo === 'coach' || (modo === 'alumno' && alumno().verSemana));
   if (modo === 'int') { $('enfoque').innerHTML = ''; return renderInt() }
   renderEnfoque();
   modo === 'alumno' ? renderAlumno() : renderCoach();
@@ -566,18 +577,21 @@ let psAlumno = [];
 let campanaSonada = false;
 function sonarCampana() { [0, 220, 440, 900, 1120, 1340].forEach((t, i) => setTimeout(() => beep(i % 3 === 2 ? 1318 : 1568, 160, .3), t)); navigator.vibrate?.([200, 100, 200, 300, 200, 100, 200]) }
 function renderAlumno() {
-  const a = alumno(), d = rutinaDeHoy(a);
+  const a = alumno(), asig = rutinaDeHoy(a), semana = !!a.verSemana;
+  // Con "toda la semana" el alumno elige el día; el día de hoy muestra la rutina asignada si la hay.
+  const d = semana ? (dia === hoy && asig ? asig : a.semana?.[dia]) : asig, esAsig = d && d === asig;
   let h = '';
-  if (!d?.ejercicios?.length) h = a.asignada && a.asignada.fecha < hoyLocal()
+  if (semana && !d?.ejercicios?.length) h = `<div class="empty"><strong>${dia === hoy ? 'Hoy' : DIAS[dia]}: día de descanso</strong><br>Tu entrenador no programó rutina para este día.</div>`;
+  else if (!d?.ejercicios?.length) h = a.asignada && a.asignada.fecha < hoyLocal()
     ? `<div class="empty"><strong>La rutina anterior se borró a las 12 de la noche</strong><br>Cuando tu entrenador te asigne la de hoy, sonará una campana 🔔.</div>`
     : `<div class="empty"><strong>Todavía no tienes rutina para hoy</strong><br>Cuando tu entrenador te la asigne, sonará una campana 🔔. Mientras tanto, hidrátate y descansa.</div>`;
-  if (!d?.ejercicios?.length) h += `<div class="card" style="margin-top:12px"><span class="label">¿Te llegó la rutina por WhatsApp y no aparece?</span>
+  if (!d?.ejercicios?.length && (!semana || dia === hoy)) h += `<div class="card" style="margin-top:12px"><span class="label">¿Te llegó la rutina por WhatsApp y no aparece?</span>
     <p class="hint" style="margin:0">Mantén presionado el mensaje en WhatsApp, cópialo y pégalo aquí.</p>
     <div class="field"><textarea id="pegar-rutina" aria-label="Mensaje de WhatsApp con la rutina" placeholder="Pega aquí el mensaje completo"></textarea></div>
     <button class="btn" id="pegar-ok">Abrir mi rutina</button></div>`;
-  else {
+  if (d?.ejercicios?.length) {
     const ps = psAlumno = pasos(d);
-    h = (d.nueva ? `<button class="campana" id="campana"><span class="bell">🔔</span><span><strong>¡Te llegó la rutina de hoy!</strong><small>${esc(d.titulo || 'Rutina')} · de ${esc(coach().nombre)}. Toca para verla.</small></span></button>` : '') + `<div class="day-head"><div><span class="label">Hoy · ${d.ejercicios.length} ejercicios · se borra a las 12 de la noche</span><h2>${esc(d.titulo || 'Rutina del día')}</h2></div>
+    h = (d.nueva ? `<button class="campana" id="campana"><span class="bell">🔔</span><span><strong>¡Te llegó la rutina de hoy!</strong><small>${esc(d.titulo || 'Rutina')} · de ${esc(coach().nombre)}. Toca para verla.</small></span></button>` : '') + `<div class="day-head"><div><span class="label">${esAsig ? `Hoy · ${d.ejercicios.length} ejercicios · se borra a las 12 de la noche` : `${dia === hoy ? 'Hoy' : DIAS[dia]} · ${d.ejercicios.length} ejercicios · rutina de la semana`}</span><h2>${esc(d.titulo || 'Rutina del día')}</h2></div>
       <div class="meta"><span class="num">~${Math.round(duracion(d) / 60)} min</span>duración</div></div><ol class="steps">` +
       ps.slice(1, -1).map((p, j) => p.tipo === 'work'
         ? `<li class="step t-work">${maqE(p)}<div class="txt"><strong>${esc(p.nombre)} · ${p.serie}/${p.series}</strong><span>${p.serie === 1 ? esc(p.msg) : (p.seg ? 'Por tiempo' : 'Por repeticiones')}</span>${p.serie === 1 ? `<span class="acciones"><button class="audio" data-hablar="${j + 1}" aria-label="Escuchar cómo se hace ${esc(p.nombre)}">🔊 Escuchar cómo se hace</button><button class="audio" data-obs="${p.ei}">📝 Observaciones${p.obs ? ' •' : ''}</button></span>
@@ -706,6 +720,15 @@ function renderCoach() {
     ${(a.reportes || []).some(x => x.fecha === hoyLocal()) ? `<button class="pill sos-pill" id="ver-rep" style="margin-bottom:8px">🆘 ${esc(a.nombre)} reportó ${[...new Set(a.reportes.filter(x => x.fecha === hoyLocal()).map(x => SOS[x.tipo][1].toLowerCase()))].join(' y ')} hoy ↓</button>` : ''}
     ${(a.ficha?.condiciones || a.ficha?.molestias) ? `<button class="pill" id="ver-mol" style="margin-bottom:12px">Tiene molestias: revisar antes de programar ↓</button>` : ''}
     <div class="field"><label class="label" for="titulo">Rutina del ${DIAS[dia]}</label><input id="titulo" value="${esc(d.titulo)}" placeholder="Ej. Pecho y tríceps (vacío = descanso)"></div>
+    <details class="card tiempos" style="margin-top:10px"><summary>⏱ Tiempos de descanso</summary>
+      <div class="grid3">
+        <div class="field"><label class="label" for="t-ox">Oxigenar entre series (s)</label><input id="t-ox" type="number" min="0" inputmode="numeric" value="${tiemposCoach().oxigenar}"></div>
+        <div class="field"><label class="label" for="t-ca">Al cambiar de ejercicio (s)</label><input id="t-ca" type="number" min="0" inputmode="numeric" value="${tiemposCoach().cambio}"></div>
+        <div class="field"><label class="label" for="t-pr">Prepárate al iniciar (s)</label><input id="t-pr" type="number" min="0" inputmode="numeric" value="${tiemposCoach().prep}"></div>
+      </div>
+      <p class="hint" style="margin:0">Se usan en los ejercicios nuevos. Cada ejercicio también se puede ajustar por separado.</p>
+      <button class="btn sm" id="t-aplicar" ${d.ejercicios.length ? '' : 'disabled'}>Aplicar a todos los ejercicios del ${DIAS[dia]}</button>
+    </details>
     <p class="hint" style="margin-top:6px">En cada ejercicio elige cómo se mide: por <strong>repeticiones</strong> (el alumno hace sus reps y toca “Terminé la serie”) o por <strong>tiempo</strong> (cuenta regresiva).</p>
     <div class="ex-list" id="ex-list">${exHtml || '<div class="empty">Sin ejercicios. Este día se mostrará como descanso.</div>'}</div>
     <button class="btn primary" id="lib-open" style="margin:0 0 10px">✓ Agregar desde la biblioteca</button>
@@ -732,10 +755,13 @@ function renderCoach() {
 
     <h3 class="section-title">Enviar al alumno</h3>
     <div class="card">
+      <div class="field"><span class="label">Qué ve ${esc(a.nombre)} en su celular</span>
+        <div class="seg sm" role="group" aria-label="Qué ve el alumno" style="justify-self:start"><button data-ver="0" aria-pressed="${!a.verSemana}">Solo la rutina de hoy</button><button data-ver="1" aria-pressed="${!!a.verSemana}">Toda la semana</button></div>
+        <p class="hint" style="margin:0">${a.verSemana ? 'Podrá abrir la rutina de cada día (lunes a domingo). La de hoy sigue llegando con campana.' : 'Solo verá la rutina que le asignes hoy; se borra a las 12 de la noche.'}</p></div>
       <div class="field"><label class="label" for="a-tel">WhatsApp de ${esc(a.nombre)}</label><input id="a-tel" inputmode="tel" value="${esc(a.tel)}" placeholder="Ej. 573001234567"></div>
       <button class="btn primary" id="wa-rutina" style="margin:0">📲 Enviar la rutina de hoy por WhatsApp</button>
       <div id="wa-out" class="hint" hidden></div>
-      <p class="hint" style="margin:0">El alumno toca el enlace y la rutina se abre en su celular con la campana 🔔. Si todavía no la asignaste hoy, se envía la del ${DIAS[dia]}.</p>
+      <p class="hint" style="margin:0">Se envía la rutina del <strong>${DIAS[dia]}</strong> de ${esc(a.nombre)} tal como está ahora. Para enviar la misma rutina a otros alumnos usa “🔔 Asignar la rutina de hoy a alumnos”.</p>
       <div class="field"><label class="label" for="imp">¿Un alumno te mandó sus datos y el enlace no abrió? Pega aquí su mensaje</label><textarea id="imp" placeholder="Pega aquí el mensaje de WhatsApp completo"></textarea></div>
       <div class="row"><button class="btn sm" id="do-imp">Abrir mensaje</button><button class="btn sm ghost" id="reset">Restaurar ejemplo</button></div>
     </div>
@@ -788,7 +814,7 @@ function renderCoach() {
     save(); renderTop();
   });
   v.querySelectorAll('[data-r]').forEach(t => t.oninput = e => { a.recs[e.target.dataset.r] = e.target.value; save() });
-  $('add').onclick = () => { d.ejercicios.push(ej('', 'mancuernas', 3, 12, 0, 60, 90, '', 'reps')); save(); renderTop(); $('nm' + (d.ejercicios.length - 1))?.focus() };
+  $('add').onclick = () => { d.ejercicios.push(ej('', 'mancuernas', 3, 12, 0, tiemposCoach().oxigenar, tiemposCoach().cambio, '', 'reps')); save(); renderTop(); $('nm' + (d.ejercicios.length - 1))?.focus() };
   $('preview').onclick = () => { modo = 'alumno'; dia = hoy; renderTop() };
   $('copy-to').onchange = e => { if (e.target.value === '') return; a.semana[e.target.value] = JSON.parse(JSON.stringify(d)); save(); toast(`Copiado al ${DIAS[e.target.value]}`); renderTop() };
   $('c-tel').oninput = e => { coach().tel = e.target.value; save() };
@@ -799,15 +825,16 @@ function renderCoach() {
   if ($('ver-mol')) $('ver-mol').onclick = () => { $('mol').open = true; $('mol').scrollIntoView({ behavior: 'smooth', block: 'center' }) };
   $('lib-open').onclick = abrirBiblioteca;
   v.querySelectorAll('[data-dieta]').forEach(b => b.onclick = () => { a.conDieta = b.dataset.dieta === '1'; save(); renderTop() });
+  v.querySelectorAll('[data-ver]').forEach(b => b.onclick = () => { a.verSemana = b.dataset.ver === '1'; save(); renderTop(); toast(a.verSemana ? `${a.nombre} verá toda la semana` : `${a.nombre} verá solo la rutina de hoy`) });
   $('a-tel').oninput = e => { a.tel = e.target.value; save() };
   $('wa-rutina').onclick = async () => {
-    if (!rutinaDeHoy(a)) {
-      if (!d.ejercicios.length) return toast(`El ${DIAS[dia]} no tiene ejercicios. Arma la rutina primero.`);
-      a.asignada = { fecha: hoyLocal(), de: DIAS[dia], titulo: d.titulo, ejercicios: JSON.parse(JSON.stringify(d.ejercicios)), nueva: true }; save();
-    }
+    if (!d.ejercicios.length) return toast(`El ${DIAS[dia]} de ${a.nombre} no tiene ejercicios. Arma la rutina primero.`);
+    a.asignada = asignacion(d, dia); save();
     const link = APP_URL + '#r=' + await comprimir(JSON.stringify(paqueteRutina(a)));
     abrirWhatsApp(a.tel, `🏋️ ${a.nombre}, tu rutina de hoy (${rutinaDeHoy(a).titulo || 'Rutina'}) de ${coach().nombre}:\n\n${link}\n\nToca el enlace para abrirla en FR Fuerza Real.`, $('wa-out'));
   };
+  ['t-ox', 't-ca', 't-pr'].forEach((id, k) => $(id).oninput = e => { coach().tiempos = { ...tiemposCoach(), [['oxigenar', 'cambio', 'prep'][k]]: Math.max(0, +e.target.value || 0) }; save() });
+  $('t-aplicar').onclick = () => { const t = tiemposCoach(); d.ejercicios.forEach(e => { e.oxigenar = t.oxigenar; e.cambio = t.cambio }); save(); renderTop(); toast(`Tiempos aplicados a los ejercicios del ${DIAS[dia]}`) };
   $('c-nombre').oninput = e => { coach().nombre = e.target.value; save(); $('sel-coach').selectedOptions[0].textContent = coach().nombre };
   const asignar = semana => {
     const ids = [...v.querySelectorAll('.asig:checked')].map(c => c.value);
@@ -852,7 +879,8 @@ function paqueteRutina(a) {
   const r = JSON.parse(JSON.stringify(rutinaDeHoy(a)));
   r.ejercicios.forEach(e => { delete e.foto; delete e.obsAlumno });
   return { coach: coach().nombre, coachTel: coach().tel, alumno: { id: a.id, nombre: a.nombre, objetivo: a.objetivo, conDieta: tieneDieta(a),
-    recs: { ...a.recs, dieta: tieneDieta(a) ? a.recs?.dieta : '' }, enfoque: a.enfoque, asignada: r } };
+    recs: { ...a.recs, dieta: tieneDieta(a) ? a.recs?.dieta : '' }, enfoque: a.enfoque, asignada: r, verSemana: !!a.verSemana,
+    ...(a.verSemana ? { semana: Object.fromEntries(Object.entries(a.semana || {}).map(([k, v]) => [k, { ...v, ejercicios: v.ejercicios.map(({ foto, obsAlumno, ...e }) => e) }])) } : {}) } };
 }
 async function comprimir(txt) {
   if (!window.CompressionStream) return 'j' + b64url(txt);
@@ -971,9 +999,20 @@ function abrirAsignar(porAlarma) {
     const ids = [...$('asig').querySelectorAll('.as-al:checked')].map(c => c.value);
     if (!ids.length) return toast('Marca al menos un alumno');
     const i = +$('as-dia').value, r = a.semana[i];
-    ids.forEach(id => { lista.find(y => y.id === id).asignada = { fecha: hoyLocal(), de: DIAS[i], titulo: r.titulo, ejercicios: JSON.parse(JSON.stringify(r.ejercicios)), nueva: true } });
-    coach().alarmaAvisada = hoyLocal(); save(); cerrar(); renderTop();
-    toast(`Rutina asignada a ${ids.length} alumno${ids.length > 1 ? 's' : ''}. Les sonará la campana 🔔`);
+    const elegidos = ids.map(id => lista.find(y => y.id === id));
+    elegidos.forEach(x => x.asignada = asignacion(r, i));
+    coach().alarmaAvisada = hoyLocal(); save(); renderTop();
+    $('asig').innerHTML = `
+      <div class="lib-head"><h2 class="section-title" style="margin:0">Enviar por WhatsApp</h2><button class="btn sm ghost" id="as-x2">Listo</button></div>
+      <p class="hint" style="margin:0">Rutina del ${DIAS[i]} asignada a ${elegidos.length} alumno${elegidos.length > 1 ? 's' : ''}. Toca cada nombre para mandarle su enlace.</p>
+      <div class="lib-list">${elegidos.map(x => `<button class="btn" data-env="${x.id}" style="width:100%">📲 ${esc(x.nombre)}${x.tel ? '' : ' <small class="hint">(sin número: eliges el chat en WhatsApp)</small>'}</button>`).join('')}</div>
+      <div></div>`;
+    $('as-x2').onclick = cerrar;
+    $('asig').querySelectorAll('[data-env]').forEach(b => b.onclick = async () => {
+      const x = lista.find(y => y.id === b.dataset.env), link = APP_URL + '#r=' + await comprimir(JSON.stringify(paqueteRutina(x)));
+      b.textContent = '✓ ' + x.nombre;
+      abrirWhatsApp(x.tel, `🏋️ ${x.nombre}, tu rutina de hoy (${x.asignada.titulo || 'Rutina'}) de ${coach().nombre}:\n\n${link}\n\nToca el enlace para abrirla en FR Fuerza Real.`);
+    });
   };
 }
 function revisarAlarma(forzar) {
@@ -1087,7 +1126,7 @@ function agregarDeBiblioteca() {
   BIBLIOTECA.forEach(b => b.items.forEach(([x, vs]) => (vs || [null]).forEach(v => {
     if (!libSel.has(libId(b.g, x, v))) return;
     const nombre = v ? `${x} · ${v}` : x, t = esPorTiempo(nombre);
-    d.ejercicios.push(ej(nombre, maqPara(nombre), 3, t ? 0 : 12, t ? 30 : 0, b.g === 'abdomen' ? 30 : 60, 90, '', t ? 'tiempo' : 'reps', b.g));
+    d.ejercicios.push(ej(nombre, maqPara(nombre), 3, t ? 0 : 12, t ? 30 : 0, tiemposCoach().oxigenar, tiemposCoach().cambio, '', t ? 'tiempo' : 'reps', b.g));
   })));
   const n = libSel.size; save(); cerrarBiblioteca(); renderTop(); toast(`${n} ejercicio${n > 1 ? 's' : ''} agregado${n > 1 ? 's' : ''} al ${DIAS[dia]}`);
 }
@@ -1188,12 +1227,16 @@ function drawPlayer(soloTiempo) {
   el.style.setProperty('--c', P.int ? (p.tipo === 'work' ? 'var(--red-hi)' : '#9e1b22') : COLOR[p.tipo]);
   if (soloTiempo && el.querySelector('.count')) {
     el.querySelector('.count b').textContent = fmt(P.left).replace(/s$/, '');
+    const un = el.querySelector('.unidad'); if (un) un.textContent = P.left >= 60 ? 'MIN' : 'SEG';
     el.querySelector('.arc').style.strokeDashoffset = C * (1 - frac); return;
   }
   const sig = P.seq.slice(P.i + 1).find(x => x.tipo !== 'done') || P.seq[P.seq.length - 1];
+  // Marca de agua dentro del círculo: la máquina del ejercicio actual, o la del siguiente durante el descanso.
+  const mq = [p, sig].find(x => x.tipo === 'work' && !x.sinMaq);
+  const marca = mq ? `<div class="ring-maq" aria-hidden="true">${mq.foto ? `<img src="${mq.foto}" alt="">` : `<svg><use href="#m-${maqKey(mq.icono)}"/></svg>`}</div>` : '';
   const hechos = P.seq.slice(0, P.i).filter(x => x.tipo === 'work').length, total = P.seq.filter(x => x.tipo === 'work').length;
   const centro = p.tipo === 'done' ? `<svg width="90" height="90" style="color:var(--done)"><use href="#i-listo"/></svg>`
-    : p.seg ? `<span><b>${fmt(P.left).replace(/s$/, '')}</b><small>${p.seg >= 60 ? 'MIN' : 'SEG'}</small></span>`
+    : p.seg ? `<span><b>${fmt(P.left).replace(/s$/, '')}</b><small class="unidad">${P.left >= 60 ? 'MIN' : 'SEG'}</small></span>`
     : `<span><b>${p.reps || '—'}</b><small>REPS</small></span>`;
   el.innerHTML = `
     <div class="p-top"><button class="btn sm ghost" id="p-x">Salir</button>
@@ -1203,12 +1246,12 @@ function drawPlayer(soloTiempo) {
       <button class="btn sm ghost" id="p-voz" aria-pressed="${P.voz}">${P.voz ? 'Voz sí' : 'Voz no'}</button></div>
     <div class="p-main">
       <div class="p-phase">${p.fase || FASE[p.tipo]}${p.serie ? ` · ${P.int ? '' : 'Serie '}${p.serie}/${p.series}` : ''}</div>
-      <div class="ring"><svg viewBox="0 0 320 320"><circle cx="160" cy="160" r="${R}" fill="none" stroke="var(--surface-2)" stroke-width="16"/>
+      <div class="ring">${marca}<svg viewBox="0 0 320 320"><circle cx="160" cy="160" r="${R}" fill="none" stroke="var(--surface-2)" stroke-width="16"/>
         <circle class="arc" cx="160" cy="160" r="${R}" fill="none" stroke="var(--c)" stroke-width="16" stroke-linecap="round" stroke-dasharray="${C}" stroke-dashoffset="${C * (1 - frac)}" style="transition:stroke-dashoffset .25s linear"/></svg>
         <div class="count">${centro}</div></div>
       <h2 class="p-name">${esc(p.nombre)}</h2>
       ${p.tipo === 'work' && !p.sinMaq ? `<div class="p-media">${GRUPOS[p.grupo] ? `<span class="emo-box" title="${esc(GRUPOS[p.grupo].t)}">${GRUPOS[p.grupo].e}</span>` : ''}${maq(p, 'lg')}<button class="audio-btn" id="p-audio" aria-label="Escuchar cómo se hace">🔊<small>Escuchar</small></button></div>` : ''}
-      ${p.tipo !== 'done' && !P.int ? `<button class="btn sm sos" id="p-sos">🆘 Me siento mal</button>` : ''}
+      ${p.tipo !== 'done' && !P.int ? `<div class="p-acc"><button class="btn sm sos" id="p-sos">🆘 Me siento mal</button><label class="btn sm video-btn" for="p-video">🎥 Video al entrenador</label><input id="p-video" type="file" accept="video/*" capture="environment" hidden></div>` : ''}
       <p class="p-msg">${esc(p.msg || '')}${p.obs ? `<br><span class="p-obs">📝 ${esc(p.obs)}</span>` : ''}</p>
     </div>
     ${p.tipo !== 'done' ? `<div class="p-next t-${sig.tipo}">${sig.tipo === 'work' && !sig.sinMaq ? maq(sig) : icon(sig.icono)}<span>Después: <strong style="color:var(--fg)">${esc(sig.nombre)}</strong>${sig.seg ? ' · ' + fmt(sig.seg) : ''}</span></div>` : '<div></div>'}
@@ -1221,6 +1264,13 @@ function drawPlayer(soloTiempo) {
     </div>`;
   $('p-x').onclick = stopPlayer;
   if ($('p-sos')) $('p-sos').onclick = () => { if (p.seg && !P.pausado) { P.pausado = true; drawPlayer() } abrirSOS(p.tipo === 'work' ? p.nombre : '') };
+  if ($('p-video')) $('p-video').onchange = async e => {
+    const v = e.target.files[0]; if (!v) return;
+    const nombre = mq?.nombre || 'mi rutina', texto = `🎥 Hola ${coach().nombre}, soy ${alumno().nombre}. Te envío mi video de ${nombre} para que me corrijas la técnica.`;
+    try { if (navigator.canShare?.({ files: [v] })) { await navigator.share({ files: [v], text: texto }); return } } catch (x) { if (x.name === 'AbortError') return }
+    toast('El video quedó en tu galería: adjúntalo en el chat de WhatsApp que se abre.');
+    setTimeout(() => abrirWhatsApp(coach().tel, texto), 1200);
+  };
   if ($('p-audio')) $('p-audio').onclick = () => hablar(instruccion(p));
   $('p-voz').onclick = () => { P.voz = !P.voz; drawPlayer() };
   $('p-bip').onclick = () => { db.bipSeg = db.bipSeg === false; save(); drawPlayer() };
